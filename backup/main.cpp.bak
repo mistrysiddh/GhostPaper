@@ -1,0 +1,386 @@
+#include <Arduino.h>
+#include <SD.h>
+#include <SPI.h>
+#include <vector>
+#include <WiFi.h>
+#include "time.h"
+#include "epd_driver.h"
+#include "firasans.h"
+#include <Button2.h>
+#include "zlib/zlib.h"
+#include <Preferences.h>
+#include <Wire.h>
+#include <pcf8563.h>
+#include "config.h"
+
+// --- Prototypes ---
+void updateLibrary();
+void updateReader();
+void openBook();
+void goToSleep();
+void saveClip();
+void skipChapter();
+void resetProgress();
+
+// --- State & Constants ---
+enum AppState { STATE_SPLASH, STATE_LIBRARY, STATE_READING, STATE_SLEEP };
+#define SLEEP_TIMEOUT 300000 
+#define VERSION "v1.8.5"
+
+RTC_DATA_ATTR AppState appState = STATE_SPLASH;
+RTC_DATA_ATTR int librarySelection = 0; 
+RTC_DATA_ATTR int currentFileIndex = -1;
+RTC_DATA_ATTR long textPos = 0;
+RTC_DATA_ATTR char lastBookPath[256] = ""; 
+RTC_DATA_ATTR float fontScale = 1.0;
+
+const int BOOKS_PER_PAGE = 4;
+uint8_t *framebuffer = NULL;
+std::vector<String> books;
+Preferences prefs;
+Button2 smartBtn;
+std::vector<long> pageHistory;
+unsigned long lastInteraction = 0;
+unsigned long pressStartTime = 0;
+PCF8563_Class rtc;
+bool sdDetected = false;
+
+// --- Hardware Helpers ---
+
+float getBatteryVoltage() {
+    return (analogRead(BATT_PIN) / 4095.0) * 2.0 * 3.3 * 1.1;
+}
+
+String getTimeString() {
+    RTC_Date date = rtc.getDateTime();
+    int hour = date.hour;
+    const char* ampm = (hour >= 12) ? "PM" : "AM";
+    hour = hour % 12;
+    if (hour == 0) hour = 12;
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d:%02d%s", hour, date.minute, ampm);
+    return String(buf);
+}
+
+String getDateString() {
+    RTC_Date date = rtc.getDateTime();
+    char buf[32];
+    const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    snprintf(buf, sizeof(buf), "%s %d, %d", months[constrain(date.month-1, 0, 11)], date.day, date.year);
+    return String(buf);
+}
+
+// --- Graphics Core ---
+
+void draw_pixel_rotated(int16_t x, int16_t y, uint8_t gray) {
+    int16_t lx = (L_WIDTH - 1) - y;
+    int16_t ly = x;
+    if (lx >= 0 && lx < L_WIDTH && ly >= 0 && ly < L_HEIGHT && framebuffer) {
+        epd_draw_pixel(lx, ly, gray & 0xF0, framebuffer); 
+    }
+}
+
+void fill_rect_rotated(int16_t x, int16_t y, int16_t w, int16_t h, uint8_t gray) {
+    for (int i = 0; i < w; i++) for (int j = 0; j < h; j++) draw_pixel_rotated(x + i, y + j, gray);
+}
+
+void draw_rect_rotated(int16_t x, int16_t y, int16_t w, int16_t h, uint8_t gray) {
+    for (int i = 0; i < w; i++) { draw_pixel_rotated(x + i, y, gray); draw_pixel_rotated(x + i, y + h - 1, gray); }
+    for (int j = 0; j < h; j++) { draw_pixel_rotated(x, y + j, gray); draw_pixel_rotated(x + w - 1, y + j, gray); }
+}
+
+void draw_shadow_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint8_t depth = 4) {
+    uint8_t shadowColor = 0xAA;
+    fill_rect_rotated(x + depth, y + h, w, depth, shadowColor);
+    fill_rect_rotated(x + w, y + depth, depth, h, shadowColor);
+}
+
+void draw_rounded_rect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r, uint8_t gray) {
+    for (int i = r; i < w - r; i++) { draw_pixel_rotated(x + i, y, gray); draw_pixel_rotated(x + i, y + h - 1, gray); }
+    for (int j = r; j < h - r; j++) { draw_pixel_rotated(x, y + j, gray); draw_pixel_rotated(x + w - 1, y + j, gray); }
+}
+
+void drawBatteryIcon(int x, int y, uint8_t color) {
+    float v = getBatteryVoltage();
+    int pct = constrain((int)((v - 3.3) / (4.2 - 3.3) * 100), 0, 100);
+    draw_rect_rotated(x, y, 26, 12, color);
+    fill_rect_rotated(x + 26, y + 3, 3, 6, color);
+    for(int i=0; i<4; i++) { if (pct > (i * 25)) fill_rect_rotated(x + 2 + (i * 6), y + 2, 4, 8, color); }
+}
+
+void drawBookIcon(int x, int y, int w, int h, uint8_t color) {
+    draw_rect_rotated(x, y, w, h, color);
+    draw_rect_rotated(x + 4, y + 4, w - 8, h - 8, color);
+    fill_rect_rotated(x, y, 6, h, color);
+    for(int i=15; i<h-15; i+=12) fill_rect_rotated(x+12, y+i, w-24, 2, 0x88);
+}
+
+// --- Typography (UTF-8) ---
+
+uint32_t decode_utf8(const char** s) {
+    uint32_t cp = (unsigned char)**s;
+    if (cp < 0x80) { (*s)++; return cp; }
+    if ((cp & 0xE0) == 0xC0) { cp = ((cp & 0x1F) << 6) | ((*s)[1] & 0x3F); *s += 2; return cp; }
+    if ((cp & 0xF0) == 0xE0) { cp = ((cp & 0x0F) << 12) | (((*s)[1] & 0x3F) << 6) | (((*s)[2] & 0x3F)); *s += 3; return cp; }
+    (*s)++; return cp;
+}
+
+uint32_t filter_char(uint32_t cp) {
+    if (cp == 0x201C || cp == 0x201D) return '\"';
+    if (cp == 0x2018 || cp == 0x2019) return '\'';
+    if (cp == 0x2013 || cp == 0x2014) return '-';
+    return cp;
+}
+
+int drawChar(uint32_t cp, int x, int y, float scale = 1.0, bool bold = false, uint8_t color = 0x00) {
+    cp = filter_char(cp);
+    GFXfont *font = (GFXfont *)&FiraSans; GFXglyph *glyph; get_glyph(font, cp, &glyph);
+    if (!glyph) return (cp == ' ') ? (int)(12 * scale) : 0;
+    uint32_t offset = glyph->data_offset; int32_t bw = (glyph->width + 1) / 2;
+    unsigned long bsize = bw * glyph->height; uint8_t *bitmap = (uint8_t *)malloc(bsize);
+    if (bitmap && uncompress(bitmap, &bsize, &font->bitmap[offset], glyph->compressed_size) == Z_OK) {
+        for (int j = 0; j < glyph->height; j++) {
+            for (int i = 0; i < glyph->width; i++) {
+                uint8_t v = (i % 2 == 0) ? (bitmap[j * bw + i / 2] & 0x0F) : (bitmap[j * bw + i / 2] >> 4);
+                if (v > 2) { 
+                    int px = x + (int)((glyph->left + i) * scale);
+                    int py = y - (int)((glyph->top - j) * scale);
+                    draw_pixel_rotated(px, py, color); 
+                    if (bold) { draw_pixel_rotated(px + 1, py, color); draw_pixel_rotated(px, py + 1, color); }
+                }
+            }
+        }
+        free(bitmap);
+    }
+    return (int)(glyph->advance_x * scale);
+}
+
+int get_text_width_scaled(const char* string, float scale) {
+    int totalWidth = 0; const char* p = string;
+    while (*p) {
+        uint32_t cp = filter_char(decode_utf8(&p));
+        GFXglyph *glyph; get_glyph((GFXfont *)&FiraSans, cp, &glyph);
+        if (glyph) totalWidth += (int)(glyph->advance_x * scale); 
+        else if (cp == ' ') totalWidth += (int)(12 * scale);
+    }
+    return totalWidth;
+}
+
+void writeln_scaled(const char *string, int x, int y, float scale, bool bold = false, uint8_t color = 0x00) {
+    const char* p = string; int curX = x;
+    while (*p) {
+        uint32_t cp = decode_utf8(&p);
+        curX += drawChar(cp, curX, y, scale, bold, color);
+    }
+}
+
+// --- Logic ---
+
+String getPrefKey(String path) {
+    String key = path.substring(path.lastIndexOf('/') + 1);
+    if (key.length() > 15) key = key.substring(0, 15);
+    return key;
+}
+
+long renderPage(const char* text, int startX, int startY, int maxWidth, int maxHeight) {
+    int curX = startX; int curY = startY; const char* p = text;
+    int lineHeight = (int)(52 * fontScale); 
+    uint8_t color = 0x00;
+    while (*p) {
+        if (*p == '\r') { p++; continue; }
+        if (*p == '\n') {
+            curX = startX; curY += lineHeight;
+            if (*(p+1) == '\n') { curY += lineHeight / 2; p++; }
+            p++; if (curY > maxHeight) break; continue;
+        }
+        const char* next_p = p;
+        while (*next_p && *next_p != ' ' && *next_p != '\n' && *next_p != '\r') decode_utf8(&next_p);
+        int wordLen = next_p - p; char word[128]; if(wordLen > 127) wordLen = 127;
+        strncpy(word, p, wordLen); word[wordLen] = '\0';
+        int tW = get_text_width_scaled(word, fontScale);
+        if (curX + tW > maxWidth) { curX = startX; curY += lineHeight; }
+        if (curY > maxHeight) break;
+        const char* wp = word; while (*wp) { uint32_t cp = decode_utf8(&wp); curX += drawChar(cp, curX, curY, fontScale, false, color); }
+        p = next_p; if (*p == ' ') { curX += (int)(12 * fontScale); p++; }
+    }
+    return (p - text);
+}
+
+void scanFiles(String path) {
+    File dir = SD.open(path);
+    if (!dir || !dir.isDirectory()) return;
+    File file = dir.openNextFile();
+    while (file) {
+        if (file.isDirectory()) { String folder = file.path(); if (!folder.startsWith("/.") && folder != "/System Volume Information") scanFiles(folder); }
+        else { String n = String(file.name()); n.toLowerCase(); if (n.endsWith(".txt")) books.push_back(String(file.path())); }
+        file = dir.openNextFile();
+    }
+}
+
+void syncTime() {
+    WiFi.begin(WIFI_SSID_1, WIFI_PASS_1);
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 15) { delay(200); attempts++; }
+    if (WiFi.status() == WL_CONNECTED) {
+        configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER);
+        struct tm timeinfo;
+        if (getLocalTime(&timeinfo)) rtc.setDateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+        WiFi.disconnect(true); WiFi.mode(WIFI_OFF);
+    }
+}
+
+// --- Features ---
+
+void saveClip() {
+    File f = SD.open(books[currentFileIndex]);
+    if (f) {
+        f.seek(textPos); char *buf = (char*)malloc(512); 
+        if (buf) {
+            int r = f.readBytes(buf, 511); buf[r] = '\0';
+            File clipFile = SD.open("/clippings.txt", FILE_APPEND);
+            if (clipFile) {
+                clipFile.println("--- CLIP ---");
+                clipFile.println(books[currentFileIndex]);
+                clipFile.println(getDateString() + " " + getTimeString());
+                clipFile.println(buf); clipFile.println("\n"); clipFile.close();
+            }
+            free(buf);
+        }
+        f.close();
+    }
+    fill_rect_rotated(0, 0, P_WIDTH, P_HEIGHT, 0xAA); epd_draw_grayscale_image(epd_full_screen(), framebuffer); delay(200); updateReader();
+}
+
+void skipChapter() {
+    File f = SD.open(books[currentFileIndex]);
+    if (f) {
+        f.seek(textPos + 100); bool found = false; const char* keywords[] = {"Chapter", "CHAPTER", "Part", "PART"};
+        while (f.available()) {
+            String line = f.readStringUntil('\n');
+            for (const char* kw : keywords) { if (line.indexOf(kw) != -1 && line.length() < 50) { textPos = f.position() - line.length() - 1; found = true; break; } }
+            if (found) break; if (f.position() - textPos > 50000) break;
+        }
+        f.close();
+        if (found) { pageHistory.push_back(textPos); updateReader(); }
+        else { fill_rect_rotated(P_WIDTH/2 - 100, P_HEIGHT/2 - 30, 200, 60, 0x00); writeln_scaled("No Chapter", P_WIDTH/2 - 70, P_HEIGHT/2 + 10, 0.6, true, 0xFF); epd_draw_grayscale_image(epd_full_screen(), framebuffer); delay(1000); updateReader(); }
+    }
+}
+
+void resetProgress() {
+    if (appState == STATE_LIBRARY && !books.empty() && librarySelection < (int)books.size()) {
+        String key = getPrefKey(books[librarySelection]);
+        prefs.putLong(key.c_str(), 0);
+        fill_rect_rotated(P_WIDTH/2 - 120, P_HEIGHT/2 - 40, 240, 80, 0x00);
+        writeln_scaled("Progress Reset", P_WIDTH/2 - 100, P_HEIGHT/2 + 10, 0.5, true, 0xFF);
+        epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+        delay(1500);
+        updateLibrary();
+    }
+}
+
+// --- Views ---
+
+void showSplash() {
+    epd_poweron(); epd_clear(); memset(framebuffer, 0xFF, L_WIDTH * L_HEIGHT / 2);
+    uint8_t color = 0x00; int cx = P_WIDTH / 2; int cy = P_HEIGHT / 2;
+    for(int i=0; i<P_HEIGHT; i+=40) fill_rect_rotated(0, i, P_WIDTH, 1, 0xF5);
+    const char* title = "VELLUM"; writeln_scaled(title, (P_WIDTH - get_text_width_scaled(title, 2.2)) / 2, cy - 20, 2.2, true, color);
+    fill_rect_rotated(cx - 80, cy + 15, 160, 2, color);
+    char versionStr[32]; snprintf(versionStr, sizeof(versionStr), "VELLUM OS %s", VERSION); writeln_scaled(versionStr, (P_WIDTH - get_text_width_scaled(versionStr, 0.35)) / 2, P_HEIGHT - 40, 0.35, false, 0x88);
+    epd_draw_grayscale_image(epd_full_screen(), framebuffer); epd_poweroff();
+}
+
+void updateLibrary() {
+    epd_poweron(); epd_clear(); memset(framebuffer, 0xFF, L_WIDTH * L_HEIGHT / 2);
+    uint8_t color = 0x00;
+    fill_rect_rotated(0, 0, P_WIDTH, 60, 0xF0);
+    writeln_scaled("Library", 45, 40, 0.8, true, color); drawBatteryIcon(P_WIDTH - 45, 25, color); writeln_scaled(getTimeString().c_str(), P_WIDTH - 145, 35, 0.4, false, color);
+    fill_rect_rotated(0, 60, P_WIDTH, 2, color);
+    if (books.empty()) { writeln_scaled("No books found", 50, 200, 0.6, false, color); }
+    else {
+        int y = 80; int cardH = 130; int gap = 15;
+        int page = librarySelection / BOOKS_PER_PAGE; int startIdx = page * BOOKS_PER_PAGE;
+        for (int i=0; i < BOOKS_PER_PAGE; i++) {
+            int idx = startIdx + i; if (idx >= books.size()) break;
+            int cy = y + (i * (cardH + gap));
+            if (idx == librarySelection) { draw_shadow_rect(40, cy, P_WIDTH - 80, cardH, 8); fill_rect_rotated(40, cy, P_WIDTH - 80, cardH, 0xFF); draw_rect_rotated(40, cy, P_WIDTH - 80, cardH, color); }
+            else { draw_shadow_rect(40, cy, P_WIDTH - 80, cardH, 3); fill_rect_rotated(40, cy, P_WIDTH - 80, cardH, 0xF8); draw_rect_rotated(40, cy, P_WIDTH - 80, cardH, 0xCC); }
+            drawBookIcon(60, cy + 25, 50, 70, color);
+            String name = books[idx].substring(books[idx].lastIndexOf('/')+1); if (name.length() > 40) name = name.substring(0, 37) + "...";
+            long savedPos = prefs.getLong(getPrefKey(books[idx]).c_str(), 0); long totalSize = 1; File f = SD.open(books[idx]); if(f) { totalSize = f.size(); f.close(); }
+            int pct = (totalSize > 0) ? (savedPos * 100 / totalSize) : 0;
+            writeln_scaled(name.c_str(), 130, cy + 45, 0.65, true, color);
+            char progStr[32]; snprintf(progStr, sizeof(progStr), "%d%% Read", pct); writeln_scaled(progStr, 130, cy + 80, 0.4, false, color);
+            int barW = P_WIDTH - 250; fill_rect_rotated(130, cy + 100, barW, 4, 0xCC); if (pct > 0) fill_rect_rotated(130, cy + 100, (barW * pct)/100, 4, color);
+        }
+        char countStr[32]; snprintf(countStr, sizeof(countStr), "Page %d / %d", page + 1, (int)((books.size() + BOOKS_PER_PAGE - 1) / BOOKS_PER_PAGE));
+        writeln_scaled(countStr, (P_WIDTH - get_text_width_scaled(countStr, 0.4)) / 2, P_HEIGHT - 25, 0.4, false, 0x66);
+    }
+    epd_draw_grayscale_image(epd_full_screen(), framebuffer); epd_poweroff();
+}
+
+void updateReader() {
+    epd_poweron(); epd_clear(); memset(framebuffer, 0xFF, L_WIDTH * L_HEIGHT / 2);
+    uint8_t color = 0x00;
+    File f = SD.open(books[currentFileIndex]);
+    if (f) {
+        f.seek(textPos); const int bufSize = 5001; char *buf = (char*)malloc(bufSize); 
+        if (buf) { int r = f.readBytes(buf, bufSize - 1); buf[r] = '\0'; int startY = (int)(P_HEIGHT * 0.05) + 15; renderPage(buf, 20, startY, P_WIDTH - 20, P_HEIGHT - 15); free(buf); }
+        float v = getBatteryVoltage(); int pct = constrain((int)((v - 3.3) / (4.2 - 3.3) * 100), 0, 100);
+        fill_rect_rotated(0, P_HEIGHT - 5, (P_WIDTH * pct) / 100, 5, color);
+        prefs.putLong(getPrefKey(books[currentFileIndex]).c_str(), textPos); strcpy(lastBookPath, books[currentFileIndex].c_str()); f.close();
+    }
+    epd_draw_grayscale_image(epd_full_screen(), framebuffer); epd_poweroff();
+}
+
+void goToSleep() {
+    appState = STATE_SLEEP; epd_poweron(); epd_clear(); memset(framebuffer, 0xFF, L_WIDTH * L_HEIGHT / 2);
+    uint8_t color = 0x00;
+    draw_shadow_rect(P_WIDTH/2 - 150, 100, 300, 150, 8); fill_rect_rotated(P_WIDTH/2 - 150, 100, 300, 150, 0xFF); draw_rect_rotated(P_WIDTH/2 - 150, 100, 300, 150, color);
+    String timeStr = getTimeString(); timeStr.replace(" AM", ""); timeStr.replace(" PM", "");
+    writeln_scaled(timeStr.c_str(), (P_WIDTH - get_text_width_scaled(timeStr.c_str(), 2.5))/2, 200, 2.5, true, color);
+    String dateStr = getDateString(); writeln_scaled(dateStr.c_str(), (P_WIDTH - get_text_width_scaled(dateStr.c_str(), 0.6))/2, 240, 0.6, false, 0x44);
+    drawBookIcon(P_WIDTH / 2 - 30, P_HEIGHT - 100, 60, 80, 0x88);
+    epd_draw_grayscale_image(epd_full_screen(), framebuffer); epd_poweroff();
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_1, 0); esp_deep_sleep_start();
+}
+
+void openBook() {
+    if (books.empty() || librarySelection >= (int)books.size()) return;
+    currentFileIndex = librarySelection; textPos = prefs.getLong(getPrefKey(books[currentFileIndex]).c_str(), 0);
+    appState = STATE_READING; pageHistory.clear(); updateReader();
+}
+
+void handleNext() {
+    if (appState == STATE_LIBRARY) { if (!books.empty()) { librarySelection++; if (librarySelection >= (int)books.size()) librarySelection = 0; updateLibrary(); } }
+    else if (appState == STATE_READING) {
+        File f = SD.open(books[currentFileIndex]);
+        if (f) {
+            pageHistory.push_back(textPos); f.seek(textPos); const int bufSize = 5001; char *buf = (char*)malloc(bufSize);
+            if(buf) { int r = f.readBytes(buf, bufSize - 1); buf[r] = '\0'; int startY = (int)(P_HEIGHT * 0.05) + 15; textPos += renderPage(buf, 20, startY, P_WIDTH - 20, P_HEIGHT - 15); free(buf); }
+            f.close(); updateReader();
+        }
+    }
+}
+
+void setup() {
+    Serial.begin(115200); epd_init(); framebuffer = (uint8_t *)heap_caps_malloc(L_WIDTH * L_HEIGHT / 2, MALLOC_CAP_SPIRAM);
+    Wire.begin(BOARD_SDA, BOARD_SCL); rtc.begin();
+    prefs.begin("vellum", false); fontScale = prefs.getFloat("fscale", 1.0);
+    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED) { showSplash(); syncTime(); }
+    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS); if (SD.begin(SD_CS)) { sdDetected = true; scanFiles("/"); }
+    smartBtn.begin(BUTTON_1);
+    smartBtn.setPressedHandler([](Button2& b) { pressStartTime = millis(); });
+    smartBtn.setReleasedHandler([](Button2& b) {
+        lastInteraction = millis(); unsigned long d = millis() - pressStartTime;
+        if (d < 500) handleNext();
+        else if (d < 1500) { if (appState == STATE_LIBRARY) openBook(); else if (appState == STATE_READING && !pageHistory.empty()) { textPos = pageHistory.back(); pageHistory.pop_back(); updateReader(); } }
+        else if (d < 3000) { if (appState == STATE_READING) skipChapter(); else if (appState == STATE_LIBRARY) openBook(); }
+        else if (d < 5000) { if (appState == STATE_READING) { appState = STATE_LIBRARY; updateLibrary(); } }
+        else { if (appState == STATE_LIBRARY) resetProgress(); }
+    });
+    smartBtn.setTripleClickHandler([](Button2& b) { if (appState == STATE_READING) saveClip(); });
+    appState = STATE_LIBRARY; lastInteraction = millis(); updateLibrary();
+}
+
+void loop() { smartBtn.loop(); if (millis() - lastInteraction > SLEEP_TIMEOUT) goToSleep(); }

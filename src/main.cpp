@@ -62,14 +62,8 @@ void redrawBookCover(int index) {
     int pct = (totalSize > 0) ? (savedPos * 100 / totalSize) : 0;
     
     // Draw the cover into the framebuffer memory
+    // Uses the new style defined in library.cpp automatically
     drawEnhancedBookCover(x, y, books[index].substring(books[index].lastIndexOf('/') + 1), pct, index);
-    
-    // Redraw selection border if it was the selected book
-    if (index == librarySelection) {
-        draw_rounded_rect(x - 6, y - 6, BOOK_W + 12, BOOK_H + 12, 10, COL_BLACK);
-        draw_rounded_rect(x - 5, y - 5, BOOK_W + 10, BOOK_H + 10, 9, COL_BLACK);
-        draw_rounded_rect(x - 4, y - 4, BOOK_W + 8, BOOK_H + 8, 8, COL_DARK);
-    }
 }
 
 void updateBookCardMenu(int index, bool showMenu) {
@@ -102,24 +96,33 @@ void updateBookCardMenu(int index, bool showMenu) {
 
     epd_poweron();
 
-    if (showMenu) {
-        // A. Physically clear area to white (3 cycles)
-        for(int i=0; i<3; i++) {
-            epd_push_pixels(cardArea, 50, 1);
-        }
+    // --- CRITICAL: Universal Physical Wash ---
+    for (int i = 0; i < 3; i++) {
+        epd_push_pixels(cardArea, 50, 1);
+    }
 
-        // B. Update the framebuffer with the Menu UI
-        fill_rect_rotated(x, y, BOOK_W, BOOK_H, COL_WHITE);
-        draw_rect_rotated(x, y, BOOK_W, BOOK_H, COL_BLACK);
+    if (showMenu) {
+        // --- PREMIUM MENU DESIGN ---
+        // 1. Light Gray Backdrop
+        fill_rect_rotated(x, y, BOOK_W, BOOK_H, COL_LIGHT);
+        draw_rect_rotated(x, y, BOOK_W, BOOK_H, COL_BLACK); // Outer border
 
         int bh = BOOK_H / 3;
-        writeln_scaled("OPEN", x + 20, y + 40, 0.8, true, COL_BLACK);
-        draw_line_rotated(x, y + bh, x + BOOK_W, y + bh, COL_BLACK);
 
-        writeln_scaled("RESET", x + 20, y + bh + 40, 0.8, true, COL_BLACK);
-        draw_line_rotated(x, y + 2 * bh, x + BOOK_W, y + 2 * bh, COL_BLACK);
+        // Button 1: READ (Primary) - Bold & Large
+        writeln_scaled("READ", x + 35, y + 45, 1.0, true, COL_BLACK);
+        
+        // Hairline Separator (Padding on sides)
+        draw_line_rotated(x + 20, y + bh, x + BOOK_W - 20, y + bh, COL_GRAY);
 
-        writeln_scaled("BACK", x + 20, y + 2 * bh + 40, 0.8, true, COL_BLACK);
+        // Button 2: RESET (Secondary)
+        writeln_scaled("RESET", x + 35, y + bh + 45, 0.8, true, COL_BLACK);
+        
+        // Hairline Separator
+        draw_line_rotated(x + 20, y + 2 * bh, x + BOOK_W - 20, y + 2 * bh, COL_GRAY);
+
+        // Button 3: BACK (Tertiary) - Gray Text
+        writeln_scaled("BACK", x + 35, y + 2 * bh + 45, 0.8, true, COL_GRAY);
     }
 
     // Refresh the entire Stripe (works for both menu and cover restoration)
@@ -180,6 +183,18 @@ void handleTouchAction(int x, int y) {
                     
                     int targetIdx = startIdx + i;
                     if (targetIdx < (int)books.size()) {
+                        // --- INTERACTION FEEDBACK: FLASH HIGHLIGHT ---
+                        // Physically flash the card black briefly to register touch
+                        Rect_t cardArea = {
+                            .x = (int32_t)(960 - 1 - (yStart + BOOK_H)),
+                            .y = (int32_t)xStart,
+                            .width = (int32_t)BOOK_H,
+                            .height = (int32_t)BOOK_W
+                        };
+                        epd_poweron();
+                        epd_push_pixels(cardArea, 30, 0); // 0 = Darken (Black flash)
+                        epd_poweroff();
+
                         focusedBookIndex = targetIdx;
                         appState = STATE_BOOK_OPTIONS;
                         updateBookCardMenu(focusedBookIndex, true);
@@ -213,6 +228,7 @@ void handleTouchAction(int x, int y) {
         }
     }
     else if (appState == STATE_BOOK_OPTIONS) {
+
         int localIdx = focusedBookIndex % SHELF_BOOKS_PER_PAGE;
         int col = localIdx % SHELF_COLS;
         int row = localIdx / SHELF_COLS;

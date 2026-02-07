@@ -174,7 +174,7 @@
 
 
 
-#define GAP_X            40
+#define GAP_X            50
 
 
 
@@ -182,7 +182,15 @@
 
 
 
-#define GAP_Y            30
+
+
+
+
+
+
+
+
+#define GAP_Y            40
 
 
 

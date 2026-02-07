@@ -13,6 +13,7 @@ RTC_DATA_ATTR int currentFileIndex = -1;
 RTC_DATA_ATTR long textPos = 0;
 RTC_DATA_ATTR float fontScale = 1.0;
 RTC_DATA_ATTR long lastPageByteCount = 0;
+RTC_DATA_ATTR int focusedBookIndex = -1;
 
 uint8_t *framebuffer = NULL;
 std::vector<String> books;
@@ -23,6 +24,7 @@ std::vector<long> pageHistory;
 unsigned long lastInteraction = 0;
 unsigned long lastTouchTime = 0;
 PCF8563_Class rtc;
+bool touchReleased = true; // Guard for double clicks
 
 // --- Visual Feedback Functions ---
 
@@ -32,6 +34,7 @@ void showTapFeedback(int x, int y) {
     draw_circle_rotated(x, y, 11, COL_BLACK);
     fill_rect_rotated(x - 2, y - 2, 4, 4, COL_BLACK);
     epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+    epd_poweroff();
     delay(100);
 }
 
@@ -39,7 +42,91 @@ void showTransitionEffect() {
     epd_poweron();
     memset(framebuffer, COL_LIGHT, L_WIDTH * L_HEIGHT / 2);
     epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+    epd_poweroff();
     delay(80);
+}
+
+// --- Menu Logic ---
+
+void redrawBookCover(int index) {
+    int localIdx = index % SHELF_BOOKS_PER_PAGE;
+    int col = localIdx % SHELF_COLS;
+    int row = localIdx / SHELF_COLS;
+    int x = GAP_X + col * (BOOK_W + GAP_X);
+    int y = SHELF_START_Y + row * (BOOK_H + GAP_Y);
+
+    long savedPos = prefs.getLong(getPrefKey(books[index]).c_str(), 0);
+    long totalSize = 1;
+    File f = SD.open(books[index]);
+    if (f) { totalSize = f.size(); f.close(); }
+    int pct = (totalSize > 0) ? (savedPos * 100 / totalSize) : 0;
+    
+    // Draw the cover into the framebuffer memory
+    drawEnhancedBookCover(x, y, books[index].substring(books[index].lastIndexOf('/') + 1), pct, index);
+    
+    // Redraw selection border if it was the selected book
+    if (index == librarySelection) {
+        draw_rounded_rect(x - 6, y - 6, BOOK_W + 12, BOOK_H + 12, 10, COL_BLACK);
+        draw_rounded_rect(x - 5, y - 5, BOOK_W + 10, BOOK_H + 10, 9, COL_BLACK);
+        draw_rounded_rect(x - 4, y - 4, BOOK_W + 8, BOOK_H + 8, 8, COL_DARK);
+    }
+}
+
+void updateBookCardMenu(int index, bool showMenu) {
+    // 1. Calculate Logical Portrait Position (540x960)
+    int localIdx = index % SHELF_BOOKS_PER_PAGE;
+    int col = localIdx % SHELF_COLS;
+    int row = localIdx / SHELF_COLS;
+    int x = GAP_X + col * (BOOK_W + GAP_X);
+    int y = SHELF_START_Y + row * (BOOK_H + GAP_Y);
+
+    // 2. Physical Mapping (Portrait -> Landscape 960x540)
+    int32_t physY = x;
+    int32_t physH = BOOK_W;
+
+    // 3. Define the Physical Stripe (Full Width 960)
+    Rect_t stripeArea = {
+        .x = 0,
+        .y = physY,
+        .width = 960,
+        .height = physH
+    };
+
+    // Card-only area for the physical "wash"
+    Rect_t cardArea = {
+        .x = (int32_t)(960 - 1 - (y + BOOK_H)),
+        .y = (int32_t)x,
+        .width = (int32_t)BOOK_H,
+        .height = (int32_t)BOOK_W
+    };
+
+    epd_poweron();
+
+    if (showMenu) {
+        // A. Physically clear area to white (3 cycles)
+        for(int i=0; i<3; i++) {
+            epd_push_pixels(cardArea, 50, 1);
+        }
+
+        // B. Update the framebuffer with the Menu UI
+        fill_rect_rotated(x, y, BOOK_W, BOOK_H, COL_WHITE);
+        draw_rect_rotated(x, y, BOOK_W, BOOK_H, COL_BLACK);
+
+        int bh = BOOK_H / 3;
+        writeln_scaled("OPEN", x + 20, y + 40, 0.8, true, COL_BLACK);
+        draw_line_rotated(x, y + bh, x + BOOK_W, y + bh, COL_BLACK);
+
+        writeln_scaled("RESET", x + 20, y + bh + 40, 0.8, true, COL_BLACK);
+        draw_line_rotated(x, y + 2 * bh, x + BOOK_W, y + 2 * bh, COL_BLACK);
+
+        writeln_scaled("BACK", x + 20, y + 2 * bh + 40, 0.8, true, COL_BLACK);
+    }
+
+    // Refresh the entire Stripe (works for both menu and cover restoration)
+    uint8_t *stripePtr = &framebuffer[physY * 960 / 2];
+    epd_draw_grayscale_image(stripeArea, stripePtr);
+    
+    epd_poweroff();
 }
 
 // --- Direct Touch Action Logic ---
@@ -93,9 +180,9 @@ void handleTouchAction(int x, int y) {
                     
                     int targetIdx = startIdx + i;
                     if (targetIdx < (int)books.size()) {
-                        librarySelection = targetIdx;
-                        showTransitionEffect();
-                        openBook();
+                        focusedBookIndex = targetIdx;
+                        appState = STATE_BOOK_OPTIONS;
+                        updateBookCardMenu(focusedBookIndex, true);
                     }
                     return;
                 }
@@ -110,6 +197,7 @@ void handleTouchAction(int x, int y) {
                     showTapFeedback(x, y);
                     librarySelection = max(0, librarySelection - SHELF_BOOKS_PER_PAGE);
                     updateLibrary();
+                    return;
                 }
                 // Right side - Next page
                 else if (x > P_WIDTH * 0.7 && page < totalPages - 1) {
@@ -119,8 +207,55 @@ void handleTouchAction(int x, int y) {
                         librarySelection = ((int)books.size() - 1);
                     }
                     updateLibrary();
+                    return;
                 }
             }
+        }
+    }
+    else if (appState == STATE_BOOK_OPTIONS) {
+        int localIdx = focusedBookIndex % SHELF_BOOKS_PER_PAGE;
+        int col = localIdx % SHELF_COLS;
+        int row = localIdx / SHELF_COLS;
+
+        int cardX = GAP_X + col * (BOOK_W + GAP_X);
+        int cardY = SHELF_START_Y + row * (BOOK_H + GAP_Y);
+
+        if (x >= cardX && x <= cardX + BOOK_W && y >= cardY && y <= cardY + BOOK_H) {
+            int bh = BOOK_H / 3;
+            int localY = y - cardY;
+
+            if (localY < bh) {
+                // OPEN: Open book normally
+                librarySelection = focusedBookIndex;
+                showTransitionEffect();
+                openBook();
+                return;
+            }
+            else if (localY < 2 * bh) {
+                // RESET: Delete progress and open
+                String key = getPrefKey(books[focusedBookIndex]);
+                prefs.remove(key.c_str());
+                if (DEBUG_ON) Serial.println(F("DEBUG: Progress Reset"));
+                librarySelection = focusedBookIndex;
+                showTransitionEffect();
+                openBook();
+                return;
+            }
+            else {
+                // BACK: Close menu
+                appState = STATE_LIBRARY;
+                redrawBookCover(focusedBookIndex);
+                updateBookCardMenu(focusedBookIndex, false);
+                focusedBookIndex = -1;
+                return;
+            }
+        } else {
+            // Tap outside -> Close menu
+            appState = STATE_LIBRARY;
+            redrawBookCover(focusedBookIndex);
+            updateBookCardMenu(focusedBookIndex, false);
+            focusedBookIndex = -1;
+            return;
         }
     }
 }
@@ -246,20 +381,12 @@ void setup() {
     }
     
     // 3. Initialize GT911 Touch
-    touch.setPins(-1, TOUCH_INT);
-    // Scan specifically for GT911 addresses
-    bool touchFound = false;
+    touch.setPins(TOUCH_RST, TOUCH_INT);
     if (touch.begin(Wire, 0x5D, TOUCH_SDA, TOUCH_SCL)) {
-        touchFound = true;
-    } else if (touch.begin(Wire, 0x14, TOUCH_SDA, TOUCH_SCL)) {
-        touchFound = true;
-    }
-
-    if (touchFound) {
-        touch.setMaxCoordinates(L_WIDTH, L_HEIGHT);
-        touch.setSwapXY(true);
-        touch.setMirrorXY(true, true);
-        Serial.println(F("GT911 Touch Initialized Successfully (Portrait)."));
+        touch.setMaxCoordinates(P_WIDTH, P_HEIGHT);
+        touch.setSwapXY(false); // Explicitly disable swap
+        touch.setMirrorXY(false, false); 
+        Serial.println(F("GT911 Touch Initialized Successfully."));
     } else {
         Serial.println(F("GT911 Touch NOT found."));
     }
@@ -273,7 +400,7 @@ void setup() {
 void loop() { 
     static unsigned long lastBeat = 0;
     if (millis() - lastBeat > 1000) {
-        Serial.printf("DEBUG: System Running. State: %d, Time: %lu, Books: %d\n", appState, millis(), (int)books.size());
+        // Serial.printf("DEBUG: System Running. State: %d, Time: %lu\n", appState, millis());
         lastBeat = millis();
     }
 
@@ -283,17 +410,8 @@ void loop() {
             Serial.println(F("DEBUG: Splash timeout reached. Transitioning..."));
             appState = STATE_LIBRARY; // Update state first
             showTransitionEffect();
-            Serial.println(F("DEBUG: Calling updateLibrary()..."));
             updateLibrary();
-            Serial.println(F("DEBUG: updateLibrary() returned successfully."));
             lastInteraction = millis();
-        } else {
-            // Log every second how much time is left
-            static unsigned long lastLog = 0;
-            if (millis() - lastLog > 1000) {
-                Serial.printf("DEBUG: Splash timer: %lu/5000ms\n", timeElapsed);
-                lastLog = millis();
-            }
         }
     }
 
@@ -304,21 +422,29 @@ void loop() {
         lastHeaderUpdate = millis();
     }
 
-    // Direct Touch using SensorLib GT911
+    // Direct Touch using TouchDrvGT911
     if (millis() > lastTouchTime + TOUCH_COOLDOWN) {
         int16_t tx[5], ty[5];
-        uint8_t n = touch.getPoint(tx, ty, 5); // Returns number of points
+        uint8_t n = touch.getPoint(tx, ty); // Returns number of points
 
         if (n > 0) {
-            // tx[0] and ty[0] are the coordinates of the first finger
-            if (DEBUG_ON) Serial.printf("Touch: Mapped(%d,%d)\n", tx[0], ty[0]);
+            if (touchReleased) { // Only act if previously released
+                // Manual Mapping: Inverted Portrait
+                int mappedX = 539 - tx[0];
+                int mappedY = 959 - ty[0];
+                
+                if (DEBUG_ON) Serial.printf("Touch: Raw(%d,%d) -> Mapped(%d,%d)\n", tx[0], ty[0], mappedX, mappedY);
 
-            if (appState != STATE_SPLASH) {
-                lastInteraction = millis();
+                if (appState != STATE_SPLASH) {
+                    lastInteraction = millis();
+                }
+
+                handleTouchAction(mappedX, mappedY);
+                lastTouchTime = millis();
+                touchReleased = false; // Block subsequent reads until release
             }
-
-            handleTouchAction(tx[0], ty[0]);
-            lastTouchTime = millis();
+        } else {
+            touchReleased = true; // Reset when no touch detected
         }
     }
 }

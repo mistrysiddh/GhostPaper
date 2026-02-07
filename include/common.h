@@ -11,7 +11,7 @@
 #include "config.h"
 
 // --- State ---
-enum AppState { STATE_SPLASH, STATE_LIBRARY, STATE_READING };
+enum AppState { STATE_SPLASH, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS };
 extern RTC_DATA_ATTR AppState appState;
 extern RTC_DATA_ATTR int librarySelection; 
 extern RTC_DATA_ATTR int targetBookIndex;
@@ -22,6 +22,7 @@ extern RTC_DATA_ATTR long textPos;
 extern RTC_DATA_ATTR float fontScale;
 extern RTC_DATA_ATTR bool touchEnabled;
 extern RTC_DATA_ATTR long lastPageByteCount;
+extern RTC_DATA_ATTR int focusedBookIndex;
 
 // --- Shared Objects ---
 extern uint8_t *framebuffer;
@@ -33,6 +34,7 @@ extern std::vector<long> pageHistory;
 
 // --- Prototypes ---
 void updateLibrary();
+void drawEnhancedBookCover(int x, int y, String title, int progress, int bookIndex);
 void updateReader(bool partial_refresh = false);
 void partialUpdateHeader();
 long renderPage(const char* text, int startX, int startY, int maxWidth, int maxHeight);
@@ -42,6 +44,8 @@ String getPrefKey(String path);
 float getBatteryVoltage();
 String getTimeString();
 void scanFiles(String path);
+void showTransitionEffect();
+void updateBookCardMenu(int index, bool showMenu);
 
 // --- Graphics Prototypes ---
 void draw_pixel_rotated(int16_t x, int16_t y, uint8_t gray);

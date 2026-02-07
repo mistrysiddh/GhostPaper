@@ -29,13 +29,55 @@ bool touchReleased = true; // Guard for double clicks
 // --- Visual Feedback Functions ---
 
 void showTapFeedback(int x, int y) {
+#if TAP_INDICATOR_STYLE == 1
+    // Style 1: Small circular dot for subtle feedback
+    int radius = 10;
+    int size = (radius * 2) + 4;
+    
+    // 1. Prepare a small localized buffer for the circle
+    // We use a small portion of the framebuffer temporarily or a stack-allocated one
+    uint8_t circleBuf[size * size / 2]; 
+    memset(circleBuf, COL_WHITE, sizeof(circleBuf));
+    
+    // Draw circle into our small buffer (coordinates relative to buffer)
+    // We can use epd_fill_circle but it expects the full framebuffer size logic
+    // So we manually draw a few lines/pixels for speed and control
+    for (int dy = -radius; dy <= radius; dy++) {
+        for (int dx = -radius; dx <= radius; dx++) {
+            if (dx*dx + dy*dy <= radius*radius) {
+                int lx = dx + radius + 2;
+                int ly = dy + radius + 2;
+                int idx = (ly * size + lx) / 2;
+                if (lx % 2 == 0) circleBuf[idx] = (circleBuf[idx] & 0x0F) | (COL_BLACK << 4);
+                else circleBuf[idx] = (circleBuf[idx] & 0xF0) | (COL_BLACK & 0x0F);
+            }
+        }
+    }
+
+    // 2. Physical Mapping (Portrait -> Landscape)
+    Rect_t area = {
+        .x = (int32_t)(960 - 1 - (y + size/2)),
+        .y = (int32_t)(x - size/2),
+        .width = (uint32_t)size,
+        .height = (uint32_t)size
+    };
+
     epd_poweron();
-    draw_circle_rotated(x, y, 12, COL_BLACK);
-    draw_circle_rotated(x, y, 11, COL_BLACK);
-    fill_rect_rotated(x - 2, y - 2, 4, 4, COL_BLACK);
-    epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+    epd_draw_grayscale_image(area, circleBuf);
     epd_poweroff();
-    delay(100);
+#else
+    // Default Style: Fast localized dark flash
+    int size = 40;
+    Rect_t area = {
+        .x = (int32_t)(960 - 1 - (y + size/2)),
+        .y = (int32_t)(x - size/2),
+        .width = (uint32_t)size,
+        .height = (uint32_t)size
+    };
+    epd_poweron();
+    epd_push_pixels(area, 20, 0); // Quick darken
+    epd_poweroff();
+#endif
 }
 
 void showTransitionEffect() {
@@ -343,14 +385,12 @@ void handleTouchAction(int x, int y) {
                 
                 // Left side - Previous page
                 if (x < P_WIDTH * 0.3 && page > 0) {
-                    showTapFeedback(x, y);
                     librarySelection = max(0, librarySelection - SHELF_BOOKS_PER_PAGE);
                     updateLibrary();
                     return;
                 }
                 // Right side - Next page
                 else if (x > P_WIDTH * 0.7 && page < totalPages - 1) {
-                    showTapFeedback(x, y);
                     librarySelection += SHELF_BOOKS_PER_PAGE;
                     if (librarySelection >= (int)books.size()) {
                         librarySelection = ((int)books.size() - 1);
@@ -592,6 +632,7 @@ void loop() {
 
                 if (appState != STATE_SPLASH) {
                     lastInteraction = millis();
+                    showTapFeedback(mappedX, mappedY);
                 }
 
                 handleTouchAction(mappedX, mappedY);

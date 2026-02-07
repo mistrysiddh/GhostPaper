@@ -1,15 +1,9 @@
 #include "common.h"
 
-// Counter for periodic full refresh to prevent ghosting
-static int partialUpdateCounter = 0;
-const int MAX_PARTIAL_BEFORE_FULL = 5;  // Full refresh every 5 partial updates
-
 void partialUpdateHeader() {
     if (appState != STATE_READING) return;
     
     // Define the header area to update in PHYSICAL landscape coordinates
-    // y=0 in portrait (top) is the RIGHT side in physical landscape if not swapped, 
-    // but the driver handles the mapping. Let's use the same logic as library/reader.
     Rect_t area = {
         .x = 0,
         .y = 0,
@@ -19,8 +13,6 @@ void partialUpdateHeader() {
 
     epd_poweron();
     
-    // No epd_clear_area - we draw the whole stripe to avoid flashing
-    
     uint8_t black = COL_BLACK;
 
     // Redraw Battery Voltage into the framebuffer
@@ -29,12 +21,9 @@ void partialUpdateHeader() {
     sprintf(battStr, "%.2fV", batt);
     int battW = get_text_width_scaled(battStr, 0.5);
     
-    // We update the framebuffer first, then push to screen
     writeln_scaled(battStr, P_WIDTH - 35 - battW, 40, 0.5, true, black);
     
-    // Push the grayscale stripe to avoid the B&W flash
     epd_draw_grayscale_image(area, framebuffer);
-    
     epd_poweroff();
 }
 
@@ -42,12 +31,9 @@ void updateReader(bool partial_refresh) {
     if (DEBUG_ON) Serial.printf("[UI] Rendering Reader Page... Partial: %s\n", partial_refresh ? "YES" : "NO");
     epd_poweron();
     
-    // Decide whether to force full refresh based on counter
-    bool doFullRefresh = !partial_refresh || (partialUpdateCounter >= MAX_PARTIAL_BEFORE_FULL);
-    
-    if (doFullRefresh) {
+    // Full refresh only when explicitly requested (e.g., opening book or manual refresh)
+    if (!partial_refresh) {
         epd_clear(); 
-        partialUpdateCounter = 0;
     }
     
     memset(framebuffer, COL_BG, L_WIDTH * L_HEIGHT / 2);
@@ -78,28 +64,38 @@ void updateReader(bool partial_refresh) {
         int battW = get_text_width_scaled(battStr, 0.5);
         writeln_scaled(battStr, P_WIDTH - 35 - battW, 40, 0.5, true, black);
 
-        // --- 2. Main Text Area (Enhanced Card Style) ---
+        // --- 2. Main Text Area (Clean Thin Border Style) ---
         int boxTop = 80;
         int boxBottom = 820;
         int boxMargin = 15;
         int boxW = P_WIDTH - 2 * boxMargin;
         int boxH = boxBottom - boxTop;
 
-        // 1. Soft Drop Shadow
-        fill_rect_rotated(boxMargin + 4, boxTop + 4, boxW, boxH, COL_GRAY);
+        // --- PHYSICAL WASH (Library Style) ---
+        // Prevents ghosting of the previous page
+        if (partial_refresh) {
+            Rect_t textCardArea = {
+                .x = (int32_t)(960 - 1 - (boxTop + boxH)),
+                .y = (int32_t)boxMargin,
+                .width = (uint32_t)boxH,
+                .height = (uint32_t)boxW
+            };
+            for (int i = 0; i < 3; i++) {
+                epd_push_pixels(textCardArea, 50, 1);
+            }
+        }
 
-        // 2. Main Background (White card)
+        // Main Background (White card)
         fill_rect_rotated(boxMargin, boxTop, boxW, boxH, COL_WHITE);
 
-        // 3. Decorative Double Border
-        draw_rounded_rect(boxMargin, boxTop, boxW, boxH, 8, black);
-        draw_rounded_rect(boxMargin + 2, boxTop + 2, boxW - 4, boxH - 4, 7, black);
+        // Single Thin Border
+        draw_rect_rotated(boxMargin, boxTop, boxW, boxH, black);
 
         // Text rendering coordinates (nested inside the border)
-        int textStartX = boxMargin + 20;
+        int textStartX = boxMargin + 15;
         int textStartY = boxTop + 45; 
-        int textMaxWidth = P_WIDTH - boxMargin - 20;
-        int textMaxHeight = boxBottom - 20; 
+        int textMaxWidth = P_WIDTH - boxMargin - 15;
+        int textMaxHeight = boxBottom - 15; 
 
         f.seek(textPos);
         const int bufSize = 5001; 
@@ -153,20 +149,12 @@ void updateReader(bool partial_refresh) {
         f.close();
     }
     
-    if (partial_refresh && !doFullRefresh) {
+    if (partial_refresh) {
         // Fast B&W partial update - minimal ghosting
-        // Use BLACK_ON_WHITE mode for faster updates
         epd_draw_image(epd_full_screen(), framebuffer, BLACK_ON_WHITE);
-        partialUpdateCounter++;
-        
-        if (DEBUG_ON) {
-            Serial.printf("[PARTIAL] Count: %d/%d\n", partialUpdateCounter, MAX_PARTIAL_BEFORE_FULL);
-        }
     } else {
         // High Quality Grayscale update - eliminates ghosting
         epd_draw_grayscale_image(epd_full_screen(), framebuffer); 
-        partialUpdateCounter = 0;
-        
         if (DEBUG_ON) {
             Serial.println(F("[FULL] Grayscale refresh completed"));
         }
@@ -177,7 +165,6 @@ void updateReader(bool partial_refresh) {
 
 // Alternative: Manual full refresh trigger
 void forceFullRefresh() {
-    partialUpdateCounter = MAX_PARTIAL_BEFORE_FULL;
     updateReader(false);
 }
 

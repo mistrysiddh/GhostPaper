@@ -1,59 +1,76 @@
-# GhostPage: Minimalist E-Reader for LilyGo T5-47 S3
+# GhostPage OS 📖
 
-GhostPage is a high-performance, ultra-minimalist E-Ink reader OS designed specifically for the **LilyGo T5-47 S3** (ESP32-S3). It features a clean bookshelf interface, rapid text rendering, and a distraction-free interaction model.
+GhostPage is a high-performance, minimalist E-Ink operating system designed for the **LilyGo T5-47 S3** (ESP32-S3). It transforms your device into a distraction-free, premium digital reader with a focus on typography, smooth transitions, and a clean "Bookshelf" aesthetic.
+
+![GhostPage Splash](https://img.shields.io/badge/OS-GhostPage-black?style=for-the-badge)
+![Platform](https://img.shields.io/badge/Platform-ESP32--S3-orange?style=for-the-badge)
+![Display](https://img.shields.io/badge/Display-EPD--4.7--Inch-green?style=for-the-badge)
 
 ## ✨ Features
 
--   **Direct Bookshelf UI:** Tap a book card to open it immediately.
--   **Touch-Only Navigation:** Entirely controlled via the touchscreen (no physical buttons required).
--   **Fast Partial Updates:** Rapid page turns using 1-bit black-and-white rendering to minimize flickering.
--   **Auto-Cleaning:** Periodically performs a full grayscale refresh to eliminate ghosting.
--   **Smart Header:** Flicker-free partial updates for the Real-Time Clock and Battery Voltage.
--   **Native Format Support:** Optimized for reading `.txt` files from SD card.
+- **Premium Bookshelf UI**: A clean, grid-based library with "Enhanced Card" styling, featuring drop shadows and decorative borders.
+- **Contextual Card Menus**: Library-style menus that appear directly on covers for reading, resetting progress, or closing.
+- **Ultra-Fast Reader Engine**: Optimized `.txt` rendering with customizable font scaling.
+- **Anti-Ghosting Technology**: 
+  - **Physical Wash**: A triple-flash clearing technique for the main text area to eliminate remnants of previous pages.
+  - **Grayscale Refresh**: High-quality full-screen refreshes when needed.
+- **Global Touch Feedback**: Immediate visual confirmation for every tap using localized, high-speed indicators (Circle/Dot style).
+- **Minimalist Reader Menu**: Full-body overlay menu in the reader for FONT +/- adjustments, full refreshes, and quick navigation.
+- **Smart Power Management**: Battery voltage monitoring and deep-sleep ready architecture.
 
-## 🛠️ Hardware Requirements
+## 🛠 Hardware Support
 
--   **Device:** LilyGo T5-4.7 inch S3 (EPD47 ESP32-S3)
--   **Storage:** MicroSD card (formatted to FAT32)
--   **Battery:** 3.7V LiPo (Standard JST connector)
+Specifically optimized for the **LilyGo T5-47 S3** (4.7-inch E-Paper display).
+- **MCU**: ESP32-S3
+- **Storage**: SD Card support for book storage (FAT32 recommended).
+- **Touch**: GT911 Capacitive Touch support.
+- **RTC**: PCF8563 for timekeeping.
 
-## 🚀 Getting Started
+## 🚀 Installation & Uploading
+
+Follow these steps to get GhostPage running on your device:
 
 ### 1. Prerequisites
--   Install [PlatformIO](https://platformio.org/).
--   Prepare a MicroSD card with `.txt` files in the root directory.
+- **Visual Studio Code (VS Code)**: [Download and install here](https://code.visualstudio.com/).
+- **PlatformIO IDE Extension**: 
+  1. Open VS Code.
+  2. Click on the **Extensions** icon on the left sidebar (or press `Ctrl+Shift+X`).
+  3. Search for "PlatformIO IDE" and click **Install**.
+- **USB-C Cable**: A high-quality data cable to connect the board to your computer.
 
-### 2. Configuration
-Open `include/config.h` and update your Wi-Fi credentials for time synchronization:
-```cpp
-#define WIFI_SSID_1 "Your_SSID"
-#define WIFI_PASS_1 "Your_Password"
-```
+### 2. Prepare the SD Card
+- Format your SD card to **FAT32**.
+- Create a folder (optional) or simply drop your `.txt` files onto the root of the card.
+- Insert the card into the LilyGo T5-47 S3.
 
-### 3. Installation
-1.  Connect your LilyGo device via USB.
-2.  Open the project in PlatformIO.
-3.  Run the **Upload** task.
+### 3. Open the Project
+- Download or clone this repository to your computer.
+- In VS Code, go to **File > Open Folder...** and select the `Lilygo` project directory.
+- Wait for PlatformIO to initialize and download the necessary libraries.
 
-## 📖 Interaction Guide
+### 4. Configuration (Optional)
+- Open `include/config.h` to adjust settings like:
+  - `#define TAP_INDICATOR_STYLE`: Set to `1` for the dot indicator.
+  - WiFi credentials for future NTP/RSS sync features.
 
--   **Splash Screen:** Automatically transitions to the Library after 5 seconds.
--   **Library Navigation:**
-    *   **Tap a Book Card:** Opens the book immediately.
-    *   **Footer Taps:** Tap the left/right sides of the footer to change library pages.
--   **Reader Screen:**
-    *   **Next Page:** Tap the "Next" button in the footer.
-    *   **Previous Page:** Tap the "Prev" button in the footer.
-    *   **Exit to Library:** Tap the "Back" button in the footer.
+### 5. Build and Upload
+1. Connect your LilyGo T5-47 S3 to your computer via USB-C.
+2. Look at the bottom status bar in VS Code:
+   - Click the **Checkmark icon** (✔) to **Build** the code and check for errors.
+   - Click the **Arrow icon** (→) to **Upload** the firmware to your board.
+3. If the upload fails, ensure the correct port is selected or try putting the board into "Bootloader Mode" by holding the **Boot** button while plugging in the USB cable.
 
-## 📁 Project Structure
+## 🎮 Controls
 
--   `src/main.cpp`: Core state machine and touch interaction logic.
--   `src/library.cpp`: Procedural book cover generation and bookshelf UI.
--   `src/reader.cpp`: High-speed text rendering engine with partial update support.
--   `src/graphics.cpp`: Rotation-aware drawing primitives.
--   `include/config.h`: Hardware definitions and UI constants.
+### Library Screen
+- **Tap Book**: Opens the options menu (READ, RESET, BACK).
+- **Footer Navigation**: Tap left/right areas of the footer to change bookshelf pages.
 
-## ⚖️ License
+### Reader Screen
+- **Tap Main Body**: Opens the Reader Menu (Font Scale, Refresh, etc.).
+- **Footer Buttons**:
+  - **Back**: Exit to Library.
+  - **Prev/Next**: Turn pages.
 
-MIT License - Feel free to use and modify for personal or commercial projects.
+---
+*Created with focus on minimalist design and performance.*

@@ -7,27 +7,6 @@
 #define SHADOW_COLOR     0xCC  // Medium gray for subtle shadow
 
 void drawEnhancedBookCover(int x, int y, String title, int progress, int bookIndex) {
-    if (appState == STATE_BOOK_MENU && targetBookIndex == bookIndex) {
-        // DRAW MENU ON THE CARD
-        fill_rect_rotated(x, y, BOOK_W, BOOK_H, COL_WHITE);
-        draw_rounded_rect(x, y, BOOK_W, BOOK_H, 6, COL_BLACK);
-        draw_rounded_rect(x+1, y+1, BOOK_W-2, BOOK_H-2, 5, COL_BLACK);
-
-        const char* opts[] = {"OPEN", "RESET", "BACK"};
-        for (int i = 0; i < 3; i++) {
-            int btnH = 65;
-            int btnY = y + 30 + (i * 85);
-            
-            // Button Background
-            fill_rect_rotated(x + 20, btnY, BOOK_W - 40, btnH, COL_BLACK);
-            
-            // Button Text
-            int tw = get_text_width_scaled(opts[i], 0.6);
-            writeln_scaled(opts[i], x + (BOOK_W - tw) / 2, btnY + 42, 0.6, true, COL_WHITE);
-        }
-        return;
-    }
-
     // Generate pseudo-random but consistent accent color based on title hash
     int hash = 0;
     for (int i = 0; i < title.length(); i++) {
@@ -162,7 +141,7 @@ void drawEnhancedBookCover(int x, int y, String title, int progress, int bookInd
     String fullPath = books[bookIndex];
     String ext = fullPath.substring(fullPath.lastIndexOf('.') + 1);
     ext.toUpperCase();
-    if (ext == "TXT" || ext == "EPUB") {
+    if (ext == "TXT") {
         int tagW = get_text_width_scaled(ext.c_str(), 0.35) + 10;
         fill_rect_rotated(x + 12, y + 12, tagW, 20, COL_WHITE);
         draw_rounded_rect(x + 12, y + 12, tagW, 20, 3, COL_BLACK);
@@ -188,9 +167,7 @@ void updateLibrary() {
     draw_line_rotated((P_WIDTH - lineLen) / 2, lineY, (P_WIDTH + lineLen) / 2, lineY, COL_WHITE);
     
     float batt = getBatteryVoltage();
-    int battPct = (int)((batt - 3.3) / (4.2 - 3.3) * 100);
-    if (battPct > 100) battPct = 100; if (battPct < 0) battPct = 0;
-    char battStr[8]; sprintf(battStr, "%d%%", battPct);
+    char battStr[16]; sprintf(battStr, "%.2fV", batt);
     int battW = get_text_width_scaled(battStr, 0.6);
     writeln_scaled(battStr, P_WIDTH - 30 - battW, headerY, 0.6, true, COL_WHITE);
     

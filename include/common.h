@@ -11,7 +11,7 @@
 #include "config.h"
 
 // --- State ---
-enum AppState { STATE_SPLASH, STATE_LIBRARY, STATE_READING, STATE_SLEEP, STATE_BOOK_MENU };
+enum AppState { STATE_SPLASH, STATE_LIBRARY, STATE_READING };
 extern RTC_DATA_ATTR AppState appState;
 extern RTC_DATA_ATTR int librarySelection; 
 extern RTC_DATA_ATTR int targetBookIndex;
@@ -33,14 +33,15 @@ extern std::vector<long> pageHistory;
 
 // --- Prototypes ---
 void updateLibrary();
-void updateReader();
+void updateReader(bool partial_refresh = false);
+void partialUpdateHeader();
 long renderPage(const char* text, int startX, int startY, int maxWidth, int maxHeight);
 void openBook();
-void goToSleep();
 void handleNext();
 String getPrefKey(String path);
 float getBatteryVoltage();
 String getTimeString();
+void scanFiles(String path);
 
 // --- Graphics Prototypes ---
 void draw_pixel_rotated(int16_t x, int16_t y, uint8_t gray);

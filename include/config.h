@@ -5,14 +5,18 @@
 #define DEBUG_ON true
 
 // --- WiFi Settings ---
-#define WIFI_SSID_1 "Your_WiFi_SSID"
-#define WIFI_PASS_1 "Your_WiFi_Password"
+#define WIFI_SSID_1 "YOUR_SSID"
+#define WIFI_PASS_1 "YOUR_PASSWORD"
 
-#define WIFI_SSID_2 "anonymous"
-#define WIFI_PASS_2 "anonymous"
+#define WIFI_SSID_2 "OPTIONAL_SSID"
+#define WIFI_PASS_2 "OPTIONAL_PASSWORD"
 
-#define WIFI_SSID_3 "Airtel"
-#define WIFI_PASS_3 "Welcome@2017"
+#define WIFI_SSID_3 "OPTIONAL_SSID"
+#define WIFI_PASS_3 "OPTIONAL_PASSWORD"
+
+// --- RSS Settings ---
+#define RSS_FEED_URL "http://feeds.bbci.co.uk/news/world/rss.xml" // Example: BBC World News
+#define MAX_ARTICLES 10 // Number of articles to fetch
 
 // --- Time Settings ---
 #define NTP_SERVER "pool.ntp.org"

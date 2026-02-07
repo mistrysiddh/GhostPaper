@@ -18,7 +18,7 @@ uint8_t *framebuffer = NULL;
 std::vector<String> books;
 Preferences prefs;
 Button2 smartBtn;
-TouchClass touch;
+TouchDrvGT911 touch;
 std::vector<long> pageHistory;
 unsigned long lastInteraction = 0;
 unsigned long lastTouchTime = 0;
@@ -202,12 +202,34 @@ void showEnhancedSplash() {
 }
 
 void setup() {
-    if (DEBUG_ON) { Serial.begin(115200); delay(1000); Serial.println(F("\n--- GhostPage BOOT ---")); }
+    Serial.begin(115200);
+    delay(1000);
+    Serial.println(F("\n--- GhostPage DIAGNOSTIC BOOT ---"));
     
     epd_init(); 
     framebuffer = (uint8_t *)heap_caps_malloc(L_WIDTH * L_HEIGHT / 2, MALLOC_CAP_SPIRAM);
+    if (framebuffer == NULL) {
+        Serial.println(F("CRITICAL ERROR: PSRAM allocation failed for framebuffer!"));
+    } else {
+        Serial.println(F("DEBUG: Framebuffer allocated in PSRAM."));
+    }
     
+    // 1. Hardware Reset (Crucial for S3)
+#ifdef TOUCH_RST
+    if (TOUCH_RST > -1) {
+        pinMode(TOUCH_RST, OUTPUT);
+        digitalWrite(TOUCH_RST, LOW);
+        delay(50);
+        digitalWrite(TOUCH_RST, HIGH);
+        delay(100);
+    }
+#endif
+
+    // 2. I2C Initialization with Pull-ups
+    pinMode(TOUCH_SDA, INPUT_PULLUP);
+    pinMode(TOUCH_SCL, INPUT_PULLUP);
     Wire.begin(TOUCH_SDA, TOUCH_SCL); 
+    
     rtc.begin();
     
     prefs.begin("vellum", false); 
@@ -215,45 +237,64 @@ void setup() {
     
     SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS); 
     if (SD.begin(SD_CS, SPI)) {
+        Serial.println(F("DEBUG: SD Card mounted successfully. Scanning files..."));
         books.clear();
         scanFiles("/");
+        Serial.printf("DEBUG: Found %d books\n", (int)books.size());
+    } else {
+        Serial.println(F("WARNING: SD Card failed to mount. App may hang in updateLibrary."));
     }
     
-    if (!touch.begin(Wire, 0x5A)) {
-        if (DEBUG_ON) Serial.println(F("Touch initialization failed!"));
+    // 3. Initialize GT911 Touch
+    touch.setPins(-1, TOUCH_INT);
+    // Scan specifically for GT911 addresses
+    bool touchFound = false;
+    if (touch.begin(Wire, 0x5D, TOUCH_SDA, TOUCH_SCL)) {
+        touchFound = true;
+    } else if (touch.begin(Wire, 0x14, TOUCH_SDA, TOUCH_SCL)) {
+        touchFound = true;
     }
 
-    smartBtn.begin(BUTTON_1);
-    smartBtn.setReleasedHandler([](Button2& b) {
-        lastInteraction = millis(); 
-        unsigned long d = b.wasPressedFor();
-        
-        if (d < 500) {
-            // Short press - next page or next book
-            handleNext();
-        }
-        else {
-            // Long press (any length over 500ms) - back to library
-            if (appState == STATE_READING) { 
-                showTransitionEffect();
-                appState = STATE_LIBRARY; 
-                updateLibrary(); 
-            }
-        }
-    });
+    if (touchFound) {
+        touch.setMaxCoordinates(L_WIDTH, L_HEIGHT);
+        touch.setSwapXY(true);
+        touch.setMirrorXY(true, true);
+        Serial.println(F("GT911 Touch Initialized Successfully (Portrait)."));
+    } else {
+        Serial.println(F("GT911 Touch NOT found."));
+    }
 
     appState = STATE_SPLASH;
     showEnhancedSplash();
     lastInteraction = millis();
+    Serial.println(F("DEBUG: Setup complete. Starting loop."));
 }
 
 void loop() { 
-    
-    if (appState == STATE_SPLASH && (millis() - lastInteraction > 5000)) {
-        showTransitionEffect();
-        appState = STATE_LIBRARY;
-        updateLibrary();
-        lastInteraction = millis();
+    static unsigned long lastBeat = 0;
+    if (millis() - lastBeat > 1000) {
+        Serial.printf("DEBUG: System Running. State: %d, Time: %lu, Books: %d\n", appState, millis(), (int)books.size());
+        lastBeat = millis();
+    }
+
+    if (appState == STATE_SPLASH) {
+        unsigned long timeElapsed = millis() - lastInteraction;
+        if (timeElapsed > 5000) {
+            Serial.println(F("DEBUG: Splash timeout reached. Transitioning..."));
+            appState = STATE_LIBRARY; // Update state first
+            showTransitionEffect();
+            Serial.println(F("DEBUG: Calling updateLibrary()..."));
+            updateLibrary();
+            Serial.println(F("DEBUG: updateLibrary() returned successfully."));
+            lastInteraction = millis();
+        } else {
+            // Log every second how much time is left
+            static unsigned long lastLog = 0;
+            if (millis() - lastLog > 1000) {
+                Serial.printf("DEBUG: Splash timer: %lu/5000ms\n", timeElapsed);
+                lastLog = millis();
+            }
+        }
     }
 
     // Header sync
@@ -263,29 +304,21 @@ void loop() {
         lastHeaderUpdate = millis();
     }
 
-    // Direct Touch using new TouchClass
+    // Direct Touch using SensorLib GT911
     if (millis() > lastTouchTime + TOUCH_COOLDOWN) {
-        if (touch.scanPoint() > 0) {
-            uint16_t tx, ty;
-            touch.getPoint(tx, ty, 0); // Get first point
+        int16_t tx[5], ty[5];
+        uint8_t n = touch.getPoint(tx, ty, 5); // Returns number of points
 
-            // Re-apply 180-degree inversion mapping logic if required
-            // For standard portrait: tx = (L_WIDTH - 1) - y; ty = x; 
-            // For inverted portrait: tx = y; ty = (L_HEIGHT - 1) - x;
-            
-            // We'll perform coordinate mapping inside handleTouchAction or here.
-            // Let's map them here to match our logical P_WIDTH/P_HEIGHT.
-            
-            // Assuming raw tx/ty are physical Landscape (0..959, 0..539)
-            // To get logical Inverted Portrait:
-            uint16_t logicalX = ty;
-            uint16_t logicalY = (L_WIDTH - 1) - tx;
+        if (n > 0) {
+            // tx[0] and ty[0] are the coordinates of the first finger
+            if (DEBUG_ON) Serial.printf("Touch: Mapped(%d,%d)\n", tx[0], ty[0]);
 
-            if (DEBUG_ON) Serial.printf("[TOUCH] Raw X:%d Y:%d -> Log X:%d Y:%d\n", tx, ty, logicalX, logicalY);
-            
-            handleTouchAction(logicalX, logicalY);
+            if (appState != STATE_SPLASH) {
+                lastInteraction = millis();
+            }
+
+            handleTouchAction(tx[0], ty[0]);
             lastTouchTime = millis();
-            lastInteraction = millis();
         }
     }
 }

@@ -206,7 +206,7 @@ void handleTouchAction(int x, int y) {
             }
             
             // Footer Tap for Page Navigation
-            if (y > P_HEIGHT - 110) {
+            if (y > P_HEIGHT - 115) {
                 int totalPages = (books.size() + SHELF_BOOKS_PER_PAGE - 1) / SHELF_BOOKS_PER_PAGE;
                 
                 // Left side - Previous page

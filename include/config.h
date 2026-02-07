@@ -134,7 +134,7 @@
 
 
 
-#define SHELF_ROWS       3
+#define SHELF_ROWS       2
 
 
 
@@ -158,7 +158,7 @@
 
 
 
-#define BOOK_W           220
+#define BOOK_W           230
 
 
 
@@ -166,7 +166,7 @@
 
 
 
-#define BOOK_H           280
+#define BOOK_H           320
 
 
 
@@ -174,31 +174,7 @@
 
 
 
-#define GAP_X            50
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#define GAP_Y            40
-
-
-
-
-
-
-
-#define SHELF_START_Y    110
+#define GAP_X            26
 
 
 
@@ -207,6 +183,22 @@
 
 
 
+
+
+
+
+
+
+
+#define GAP_Y            70
+
+
+
+
+
+
+
+#define SHELF_START_Y    115
 
 
 

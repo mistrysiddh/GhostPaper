@@ -13,7 +13,7 @@ void partialUpdateHeader() {
         .x = 0,
         .y = 0,
         .width = (uint32_t)L_WIDTH,
-        .height = 80
+        .height = 100
     };
 
     epd_poweron();
@@ -60,7 +60,7 @@ void updateReader(bool partial_refresh) {
     File f = SD.open(books[currentFileIndex]);
     if (f) {
         // --- 1. Header (Clean & Modern) ---
-        int headerH = 55;
+        int headerH = 100;
         draw_line_rotated(30, headerH, P_WIDTH - 30, headerH, black);
 
         // Title
@@ -84,12 +84,12 @@ void updateReader(bool partial_refresh) {
         if (buf) {
             int r = f.readBytes(buf, bufSize - 1); 
             buf[r] = '\0';
-            lastPageByteCount = renderPage(buf, 35, 110, P_WIDTH - 35, P_HEIGHT - 130); 
+            lastPageByteCount = renderPage(buf, 35, 115, P_WIDTH - 35, P_HEIGHT - 130); 
             free(buf);
         }
 
         // --- 3. Footer (Visual Progress & Controls) ---
-        int footerY = P_HEIGHT - 110;
+        int footerY = P_HEIGHT - 115;
         draw_line_rotated(30, footerY - 15, P_WIDTH - 30, footerY - 15, black);
 
         long totalSize = f.size();

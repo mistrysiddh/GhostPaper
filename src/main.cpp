@@ -18,7 +18,7 @@ uint8_t *framebuffer = NULL;
 std::vector<String> books;
 Preferences prefs;
 Button2 smartBtn;
-TouchDrvGT911 touch;
+TouchClass touch;
 std::vector<long> pageHistory;
 unsigned long lastInteraction = 0;
 unsigned long lastTouchTime = 0;
@@ -219,20 +219,8 @@ void setup() {
         scanFiles("/");
     }
     
-    touch.setPins(-1, TOUCH_INT); 
-    uint8_t touchAddress = 0;
-    Wire.beginTransmission(0x14);
-    if (Wire.endTransmission() == 0) touchAddress = 0x14;
-    else {
-        Wire.beginTransmission(0x5D);
-        if (Wire.endTransmission() == 0) touchAddress = 0x5D;
-    }
-
-    if (touchAddress != 0) {
-        touch.begin(Wire, touchAddress, TOUCH_SDA, TOUCH_SCL);
-        touch.setMaxCoordinates(L_WIDTH, L_HEIGHT);
-        touch.setSwapXY(true);
-        touch.setMirrorXY(true, false);
+    if (!touch.begin(Wire, 0x5A)) {
+        if (DEBUG_ON) Serial.println(F("Touch initialization failed!"));
     }
 
     smartBtn.begin(BUTTON_1);
@@ -275,11 +263,27 @@ void loop() {
         lastHeaderUpdate = millis();
     }
 
-    // Direct Touch
+    // Direct Touch using new TouchClass
     if (millis() > lastTouchTime + TOUCH_COOLDOWN) {
-        int16_t tx, ty;
-        if (touch.getPoint(&tx, &ty)) {
-            handleTouchAction(tx, ty);
+        if (touch.scanPoint() > 0) {
+            uint16_t tx, ty;
+            touch.getPoint(tx, ty, 0); // Get first point
+
+            // Re-apply 180-degree inversion mapping logic if required
+            // For standard portrait: tx = (L_WIDTH - 1) - y; ty = x; 
+            // For inverted portrait: tx = y; ty = (L_HEIGHT - 1) - x;
+            
+            // We'll perform coordinate mapping inside handleTouchAction or here.
+            // Let's map them here to match our logical P_WIDTH/P_HEIGHT.
+            
+            // Assuming raw tx/ty are physical Landscape (0..959, 0..539)
+            // To get logical Inverted Portrait:
+            uint16_t logicalX = ty;
+            uint16_t logicalY = (L_WIDTH - 1) - tx;
+
+            if (DEBUG_ON) Serial.printf("[TOUCH] Raw X:%d Y:%d -> Log X:%d Y:%d\n", tx, ty, logicalX, logicalY);
+            
+            handleTouchAction(logicalX, logicalY);
             lastTouchTime = millis();
             lastInteraction = millis();
         }

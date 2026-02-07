@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <vector>
 #include <Preferences.h>
-#include <TouchDrvGT911.hpp>
+#include "touch.h"
 #include <pcf8563.h>
 #include <SD.h>
 #include "epd_driver.h"
@@ -27,7 +27,7 @@ extern RTC_DATA_ATTR long lastPageByteCount;
 extern uint8_t *framebuffer;
 extern std::vector<String> books;
 extern Preferences prefs;
-extern TouchDrvGT911 touch;
+extern TouchClass touch;
 extern PCF8563_Class rtc;
 extern std::vector<long> pageHistory;
 

@@ -98,14 +98,13 @@ void updateReader(bool partial_refresh) {
         int textMaxHeight = boxBottom - 15; 
 
         f.seek(textPos);
-        const int bufSize = 5001; 
-        char *buf = (char*)malloc(bufSize);
-        if (buf) {
-            int r = f.readBytes(buf, bufSize - 1); 
-            buf[r] = '\0';
-            lastPageByteCount = renderPage(buf, textStartX, textStartY, textMaxWidth, textMaxHeight); 
-            free(buf);
-        }
+        
+        // OPTIMIZATION: Persistent buffer to avoid heap fragmentation
+        static char buf[5001]; 
+        
+        int r = f.readBytes(buf, sizeof(buf) - 1); 
+        buf[r] = '\0';
+        lastPageByteCount = renderPage(buf, textStartX, textStartY, textMaxWidth, textMaxHeight); 
 
         // --- 3. Footer (Visual Progress & Controls) ---
         int footerY = P_HEIGHT - 115;

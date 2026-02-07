@@ -325,64 +325,78 @@ void drawPinPad(bool settingNew) {
 
 void handlePinTouch(int x, int y) {
     int cardW = 460;
-    int cardH = 820;
     int cardX = (P_WIDTH - cardW) / 2;
     int cardY = 70;
     int kw = 110, kh = 100;
     int kGapX = 25, kGapY = 20;
+    
+    // Calculate Grid Start positions
     int gridStartX = cardX + (cardW - (3 * kw + 2 * kGapX)) / 2;
     int gridStartY = cardY + 260;
 
-    for (int i = 0; i < 12; i++) {
-        int col = i % 3;
-        int row = i / 3;
-        int bx = gridStartX + col * (kw + kGapX);
-        int by = gridStartY + row * (kh + kGapY);
+    // Check if touch is within the grid bounds first
+    if (x < gridStartX || y < gridStartY) return;
 
-        if (x >= bx && x <= bx + kw && y >= by && y <= by + kh) {
-            const char* keys[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "CLR", "0", "OK"};
-            String val = keys[i];
+    // Calculate relative coordinates
+    int relX = x - gridStartX;
+    int relY = y - gridStartY;
 
-            Rect_t masterArea = {
-                .x = (int32_t)(960 - 1 - (cardY + cardH)),
-                .y = (int32_t)cardX,
-                .width = (uint32_t)cardH,
-                .height = (uint32_t)cardW
-            };
-            epd_poweron();
-            for (int w = 0; w < 2; w++) epd_push_pixels(masterArea, 50, 1);
+    // Calculate column and row indices
+    int col = relX / (kw + kGapX);
+    int row = relY / (kh + kGapY);
 
-            if (val == "CLR") enteredPin = "";
-            else if (val == "OK") {
-                if (appState == STATE_SET_PIN) {
-                    if (enteredPin.length() == 4) {
-                        prefs.putString("saved_pin", enteredPin);
-                        activePin = enteredPin;
-                        enteredPin = "";
-                        showTransitionEffect();
-                        appState = STATE_LIBRARY;
-                        updateLibrary();
-                        return;
-                    }
-                } else {
-                    if (enteredPin == activePin) {
-                        showTransitionEffect();
-                        appState = STATE_LIBRARY;
-                        updateLibrary();
-                        enteredPin = ""; 
-                        return;
-                    } else {
-                        enteredPin = "";
-                    }
-                }
-            } else {
-                if (enteredPin.length() < 4) enteredPin += val;
+    // Validate indices (3 cols, 4 rows)
+    if (col >= 3 || row >= 4) return;
+
+    // Check if touch is inside the button (accounting for gap)
+    int offsetInCol = relX % (kw + kGapX);
+    int offsetInRow = relY % (kh + kGapY);
+    if (offsetInCol > kw || offsetInRow > kh) return; // Touched the gap
+
+    // Map row/col to key index
+    int i = row * 3 + col;
+    if (i >= 12) return;
+
+    static const char* keys[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "CLR", "0", "OK"};
+    String val = keys[i];
+
+    Rect_t masterArea = {
+        .x = (int32_t)(960 - 1 - (cardY + 820)), // 820 is cardH
+        .y = (int32_t)cardX,
+        .width = (uint32_t)820,
+        .height = (uint32_t)cardW
+    };
+    epd_poweron();
+    for (int w = 0; w < 2; w++) epd_push_pixels(masterArea, 50, 1);
+
+    if (val == "CLR") enteredPin = "";
+    else if (val == "OK") {
+        if (appState == STATE_SET_PIN) {
+            if (enteredPin.length() == 4) {
+                prefs.putString("saved_pin", enteredPin);
+                activePin = enteredPin;
+                enteredPin = "";
+                showTransitionEffect();
+                appState = STATE_LIBRARY;
+                updateLibrary();
+                return;
             }
-
-            drawPinPad(appState == STATE_SET_PIN);
-            return;
+        } else {
+            if (enteredPin == activePin) {
+                showTransitionEffect();
+                appState = STATE_LIBRARY;
+                updateLibrary();
+                enteredPin = ""; 
+                return;
+            } else {
+                enteredPin = "";
+            }
         }
+    } else {
+        if (enteredPin.length() < 4) enteredPin += val;
     }
+
+    drawPinPad(appState == STATE_SET_PIN);
 }
 
 void goToDeepSleep() {
@@ -549,17 +563,6 @@ void handleStatsTouch(int x, int y) {
 
     // 1. Check if Dismiss Button was clicked
     if (y >= btnY && y <= btnY + btnH && x >= bx && x <= bx + btnW) {
-        // Flash Feedback
-        Rect_t btnArea = {
-            .x = (int32_t)(960 - 1 - (btnY + btnH)),
-            .y = (int32_t)bx,
-            .width = (uint32_t)btnH,
-            .height = (uint32_t)btnW
-        };
-        epd_poweron();
-        epd_push_pixels(btnArea, 30, 0); // Black flash
-        epd_poweroff();
-
         showTransitionEffect();
         appState = STATE_LIBRARY;
         updateLibrary();
@@ -616,19 +619,8 @@ void handleTouchAction(int x, int y) {
                 return;
             }
         }
-        // Main Body Area - Trigger Menu (with Flash Feedback)
+        // Main Body Area - Trigger Menu
         else if (y > 80 && y < 820) {
-            // Flash Feedback for the tap area
-            Rect_t tapArea = {
-                .x = (int32_t)(960 - 1 - (y + 100)),
-                .y = (int32_t)(x - 50),
-                .width = 200,
-                .height = 100
-            };
-            epd_poweron();
-            epd_push_pixels(tapArea, 30, 0); // Black flash
-            epd_poweroff();
-
             appState = STATE_READER_OPTIONS;
             updateReaderMenu(true);
             return;
@@ -716,18 +708,6 @@ void handleTouchAction(int x, int y) {
                     
                     int targetIdx = startIdx + i;
                     if (targetIdx < (int)books.size()) {
-                        // --- INTERACTION FEEDBACK: FLASH HIGHLIGHT ---
-                        // Physically flash the card black briefly to register touch
-                        Rect_t cardArea = {
-                            .x = (int32_t)(960 - 1 - (yStart + BOOK_H)),
-                            .y = (int32_t)xStart,
-                            .width = (int32_t)BOOK_H,
-                            .height = (int32_t)BOOK_W
-                        };
-                        epd_poweron();
-                        epd_push_pixels(cardArea, 30, 0); // 0 = Darken (Black flash)
-                        epd_poweroff();
-
                         focusedBookIndex = targetIdx;
                         appState = STATE_BOOK_OPTIONS;
                         updateBookCardMenu(focusedBookIndex, true);
@@ -1033,7 +1013,6 @@ void loop() {
 
                 if (appState != STATE_SPLASH && appState != STATE_LOCK && appState != STATE_SET_PIN) {
                     lastInteraction = millis();
-                    showTapFeedback(mappedX, mappedY);
                 }
 
                 handleTouchAction(mappedX, mappedY);

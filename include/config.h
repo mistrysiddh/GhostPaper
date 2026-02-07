@@ -2,7 +2,7 @@
 #define CONFIG_H
 
 // --- Debug ---
-#define DEBUG_ON true
+#define DEBUG_ON false
 
 // --- WiFi Settings ---
 #define WIFI_SSID_1 "YOUR_SSID"

@@ -42,8 +42,8 @@ void draw_circle_section(int16_t x0, int16_t y0, int16_t r, uint8_t corners, uin
 // --- Public Graphics Functions ---
 
 void draw_pixel_rotated(int16_t x, int16_t y, uint8_t gray) {
-    int16_t lx = (L_WIDTH - 1) - y;
-    int16_t ly = x;
+    int16_t lx = y;
+    int16_t ly = (L_HEIGHT - 1) - x;
     if (lx >= 0 && lx < L_WIDTH && ly >= 0 && ly < L_HEIGHT && framebuffer) {
         epd_draw_pixel(lx, ly, gray & 0xF0, framebuffer); 
     }

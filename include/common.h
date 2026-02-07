@@ -11,7 +11,7 @@
 #include "config.h"
 
 // --- State ---
-enum AppState { STATE_SPLASH, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS, STATE_READER_OPTIONS };
+enum AppState { STATE_SPLASH, STATE_LOCK, STATE_SET_PIN, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS, STATE_READER_OPTIONS, STATE_STATS };
 extern RTC_DATA_ATTR AppState appState;
 extern RTC_DATA_ATTR int librarySelection; 
 extern RTC_DATA_ATTR int targetBookIndex;
@@ -50,6 +50,12 @@ void updateReaderMenu(bool showMenu);
 void redrawReaderText();
 void forceFullRefresh();
 void updateBookCardMenu(int index, bool showMenu);
+void drawPinPad(bool settingNew = false);
+void handlePinTouch(int x, int y);
+void goToDeepSleep();
+void drawStatsDashboard();
+void handleStatsTouch(int x, int y);
+void trackReadingActivity();
 
 // --- Graphics Prototypes ---
 void draw_pixel_rotated(int16_t x, int16_t y, uint8_t gray);

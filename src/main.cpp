@@ -234,9 +234,358 @@ void updateReaderMenu(bool showMenu) {
     }
 }
 
+String enteredPin = "";
+String activePin = ""; // Loaded from prefs
+
+void drawPinPad(bool settingNew) {
+    epd_poweron();
+    memset(framebuffer, COL_WHITE, L_WIDTH * L_HEIGHT / 2);
+
+    // --- Master Security Card ---
+    int cardW = 460;
+    int cardH = 820;
+    int cardX = (P_WIDTH - cardW) / 2;
+    int cardY = 70;
+
+    // 1. Shadow & Background
+    fill_rect_rotated(cardX + 6, cardY + 6, cardW, cardH, COL_GRAY);
+    fill_rect_rotated(cardX, cardY, cardW, cardH, COL_WHITE);
+    
+    // 2. Double Premium Border
+    draw_rounded_rect(cardX, cardY, cardW, cardH, 12, COL_BLACK);
+    draw_rounded_rect(cardX + 2, cardY + 2, cardW - 4, cardH - 4, 11, COL_BLACK);
+
+    // 3. Header Section (Dark Bar)
+    fill_rect_rotated(cardX + 15, cardY + 15, cardW - 30, 80, COL_BLACK);
+    const char* title = settingNew ? "SETUP SECURITY" : "SECURE ACCESS";
+    int tw = get_text_width_scaled(title, 0.75);
+    writeln_scaled(title, cardX + (cardW - tw) / 2, cardY + 68, 0.75, true, COL_WHITE);
+
+    // 4. PIN Dots Section
+    int dotRadius = 12;
+    int dotGap = 45;
+    int dotTotalW = (4 * 2 * dotRadius) + (3 * dotGap);
+    int dotStartX = cardX + (cardW - dotTotalW) / 2 + dotRadius;
+    int dotY = cardY + 160;
+    
+    // Decorative instructions for setup
+    if (settingNew) {
+        const char* sub = "Create a 4-digit PIN";
+        int sw = get_text_width_scaled(sub, 0.45);
+        writeln_scaled(sub, cardX + (cardW - sw) / 2, dotY + 65, 0.45, false, COL_BLACK);
+    } else {
+        draw_line_rotated(cardX + 100, dotY + 40, cardX + cardW - 100, dotY + 40, COL_LIGHT);
+    }
+
+    for (int i = 0; i < 4; i++) {
+        int dx = dotStartX + i * (2 * dotRadius + dotGap);
+        if (i < (int)enteredPin.length()) {
+            for (int r = 0; r < dotRadius; r++) draw_circle_rotated(dx, dotY, r, COL_BLACK);
+        } else {
+            draw_circle_rotated(dx, dotY, dotRadius, COL_BLACK);
+            draw_circle_rotated(dx, dotY, dotRadius - 1, COL_BLACK);
+        }
+    }
+
+    // 5. Keypad Section
+    int kw = 110, kh = 100;
+    int kGapX = 25, kGapY = 20;
+    int gridStartX = cardX + (cardW - (3 * kw + 2 * kGapX)) / 2;
+    int gridStartY = cardY + 260;
+
+    const char* keys[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "CLR", "0", "OK"};
+    for (int i = 0; i < 12; i++) {
+        int col = i % 3;
+        int row = i / 3;
+        int bx = gridStartX + col * (kw + kGapX);
+        int by = gridStartY + row * (kh + kGapY);
+
+                        // Borderless flat style
+
+                        fill_rect_rotated(bx, by, kw, kh, COL_WHITE); // BG
+
+                        
+
+                        int textW = get_text_width_scaled(keys[i], 0.8);
+
+                        writeln_scaled(keys[i], bx + (kw - textW) / 2, by + 65, 0.8, true, COL_BLACK);
+
+                
+
+        
+    }
+
+    const char* brand = "GHOSTPAGE OS SECURITY";
+    int bw = get_text_width_scaled(brand, 0.35);
+    writeln_scaled(brand, cardX + (cardW - bw) / 2, cardY + cardH - 30, 0.35, false, COL_GRAY);
+
+    epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+    epd_poweroff();
+}
+
+void handlePinTouch(int x, int y) {
+    int cardW = 460;
+    int cardH = 820;
+    int cardX = (P_WIDTH - cardW) / 2;
+    int cardY = 70;
+    int kw = 110, kh = 100;
+    int kGapX = 25, kGapY = 20;
+    int gridStartX = cardX + (cardW - (3 * kw + 2 * kGapX)) / 2;
+    int gridStartY = cardY + 260;
+
+    for (int i = 0; i < 12; i++) {
+        int col = i % 3;
+        int row = i / 3;
+        int bx = gridStartX + col * (kw + kGapX);
+        int by = gridStartY + row * (kh + kGapY);
+
+        if (x >= bx && x <= bx + kw && y >= by && y <= by + kh) {
+            const char* keys[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "CLR", "0", "OK"};
+            String val = keys[i];
+
+            Rect_t masterArea = {
+                .x = (int32_t)(960 - 1 - (cardY + cardH)),
+                .y = (int32_t)cardX,
+                .width = (uint32_t)cardH,
+                .height = (uint32_t)cardW
+            };
+            epd_poweron();
+            for (int w = 0; w < 2; w++) epd_push_pixels(masterArea, 50, 1);
+
+            if (val == "CLR") enteredPin = "";
+            else if (val == "OK") {
+                if (appState == STATE_SET_PIN) {
+                    if (enteredPin.length() == 4) {
+                        prefs.putString("saved_pin", enteredPin);
+                        activePin = enteredPin;
+                        enteredPin = "";
+                        showTransitionEffect();
+                        appState = STATE_LIBRARY;
+                        updateLibrary();
+                        return;
+                    }
+                } else {
+                    if (enteredPin == activePin) {
+                        showTransitionEffect();
+                        appState = STATE_LIBRARY;
+                        updateLibrary();
+                        enteredPin = ""; 
+                        return;
+                    } else {
+                        enteredPin = "";
+                    }
+                }
+            } else {
+                if (enteredPin.length() < 4) enteredPin += val;
+            }
+
+            drawPinPad(appState == STATE_SET_PIN);
+            return;
+        }
+    }
+}
+
+void goToDeepSleep() {
+    Serial.println(F("SYSTEM: Entering Deep Sleep Mode..."));
+    epd_poweroff_all(); // Ensure display is fully off
+    
+    // Enable wake up on BUTTON_1 (GPIO 21) being pressed (Low)
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_1, 0); 
+    
+    esp_deep_sleep_start();
+}
+
+// --- Reading Statistics Logic ---
+
+void trackReadingActivity() {
+    RTC_Date date = rtc.getDateTime();
+    int today = date.day;
+    int month = date.month;
+    
+    // Simple key: stats_MMDD (e.g., stats_208 for Feb 8)
+    char dateKey[16];
+    sprintf(dateKey, "stats_%d%02d", month, today);
+    
+    // 1. Increment daily pages
+    int pages = prefs.getInt(dateKey, 0);
+    prefs.putInt(dateKey, pages + 1);
+    
+    // 2. Increment global total
+    int total = prefs.getInt("stat_total", 0);
+    prefs.putInt("stat_total", total + 1);
+    
+    // 3. Streak Logic
+    int lastRead = prefs.getInt("last_read_day", -1);
+    if (lastRead != today) {
+        // New day!
+        int streak = prefs.getInt("stat_streak", 0);
+        
+        // Very basic streak check (doesn't handle month rollover perfectly for simplicity)
+        // Ideally we'd use Epoch time, but for this demo:
+        if (lastRead == today - 1 || (lastRead == -1)) {
+            prefs.putInt("stat_streak", streak + 1);
+        } else if (lastRead != today) {
+            // Missed a day (or same day, handled above)
+            // If it wasn't yesterday, reset streak (unless first run)
+            if (lastRead > 0 && lastRead != today) prefs.putInt("stat_streak", 1);
+        }
+        
+        prefs.putInt("last_read_day", today);
+    }
+}
+
+void drawStatsDashboard() {
+    int cardX = 30;
+    int cardY = 50;
+    int cardW = P_WIDTH - 60;
+    int cardH = 860;
+
+    // --- PHYSICAL WASH (Library Style) ---
+    // Wash the dashboard area before drawing to prevent ghosting
+    Rect_t washArea = {
+        .x = (int32_t)(960 - 1 - (cardY + cardH)),
+        .y = (int32_t)cardX,
+        .width = (uint32_t)cardH,
+        .height = (uint32_t)cardW
+    };
+    epd_poweron();
+    for (int i = 0; i < 3; i++) {
+        epd_push_pixels(washArea, 50, 1);
+    }
+
+    memset(framebuffer, COL_WHITE, L_WIDTH * L_HEIGHT / 2);
+
+    // --- 1. Master Container Card ---
+    fill_rect_rotated(cardX, cardY, cardW, cardH, COL_WHITE);
+    draw_rounded_rect(cardX, cardY, cardW, cardH, 12, COL_BLACK);
+    draw_rounded_rect(cardX + 2, cardY + 2, cardW - 4, cardH - 4, 11, COL_BLACK);
+
+    // Header Bar inside Master Card
+    fill_rect_rotated(cardX + 15, cardY + 15, cardW - 30, 70, COL_BLACK);
+    const char* title = "GHOSTPAGE ANALYTICS";
+    int tw = get_text_width_scaled(title, 0.6);
+    writeln_scaled(title, cardX + (cardW - tw) / 2, cardY + 60, 0.6, true, COL_WHITE);
+
+    // --- 2. Streak Card (Nested) ---
+    int streakY = cardY + 110;
+    int sCardH = 220;
+    fill_rect_rotated(cardX + 30, streakY, cardW - 60, sCardH, COL_WHITE);
+    draw_rounded_rect(cardX + 30, streakY, cardW - 60, sCardH, 8, COL_BLACK);
+    draw_rounded_rect(cardX + 32, streakY + 2, cardW - 64, sCardH - 4, 7, COL_BLACK);
+
+    int streak = prefs.getInt("stat_streak", 0);
+    char streakStr[16]; sprintf(streakStr, "%d", streak);
+    int sw = get_text_width_scaled(streakStr, 3.0);
+    writeln_scaled(streakStr, cardX + (cardW - sw) / 2, streakY + 140, 3.0, true, COL_BLACK);
+    
+    const char* lbl1 = "CURRENT DAY STREAK";
+    int lw = get_text_width_scaled(lbl1, 0.45);
+    writeln_scaled(lbl1, cardX + (cardW - lw) / 2, streakY + 185, 0.45, false, COL_GRAY);
+
+    // --- 3. Progress Card (Nested) ---
+    int progY = streakY + sCardH + 30;
+    int pCardH = 120;
+    fill_rect_rotated(cardX + 30, progY, cardW - 60, pCardH, COL_WHITE);
+    draw_rounded_rect(cardX + 30, progY, cardW - 60, pCardH, 8, COL_BLACK);
+    draw_rounded_rect(cardX + 32, progY + 2, cardW - 64, pCardH - 4, 7, COL_BLACK);
+
+    int total = prefs.getInt("stat_total", 0);
+    char totStr[32]; sprintf(totStr, "%d Pages Read", total);
+    int ttw = get_text_width_scaled(totStr, 0.65);
+    writeln_scaled(totStr, cardX + (cardW - ttw) / 2, progY + 75, 0.65, true, COL_BLACK);
+
+    // --- 4. Activity Heatmap Card (Nested) ---
+    int gridY = progY + pCardH + 30;
+    int gCardH = 260;
+    fill_rect_rotated(cardX + 30, gridY, cardW - 60, gCardH, COL_WHITE);
+    draw_rounded_rect(cardX + 30, gridY, cardW - 60, gCardH, 8, COL_BLACK);
+    draw_rounded_rect(cardX + 32, gridY + 2, cardW - 64, gCardH - 4, 7, COL_BLACK);
+
+    const char* hTitle = "30-DAY ACTIVITY HEATMAP";
+    int htw = get_text_width_scaled(hTitle, 0.45);
+    writeln_scaled(hTitle, cardX + (cardW - htw) / 2, gridY + 45, 0.45, true, COL_BLACK);
+
+    int cellSize = 35;
+    int cellGap = 8;
+    int cols = 7;
+    int rows = 4;
+    int gridStartX = cardX + (cardW - (cols * (cellSize + cellGap))) / 2;
+    int innerGridY = gridY + 80;
+
+    for (int r = 0; r < rows; r++) {
+        for (int c = 0; c < cols; c++) {
+            int cx = gridStartX + c * (cellSize + cellGap);
+            int cy = innerGridY + r * (cellSize + cellGap);
+            int activity = (r * cols + c) % 5; 
+            if (activity == 0) draw_rounded_rect(cx, cy, cellSize, cellSize, 4, COL_LIGHT);
+            else if (activity < 3) fill_rect_rotated(cx, cy, cellSize, cellSize, COL_LIGHT);
+            else fill_rect_rotated(cx, cy, cellSize, cellSize, COL_BLACK);
+        }
+    }
+
+    // --- 5. Close Button (Card Style) ---
+    int btnY = gridY + gCardH + 30;
+    int btnW = 200;
+    int btnH = 60;
+    int bx = cardX + (cardW - btnW) / 2;
+    fill_rect_rotated(bx, btnY, btnW, btnH, COL_WHITE);
+    draw_rounded_rect(bx, btnY, btnW, btnH, 30, COL_BLACK);
+    
+    const char* cls = "DISMISS";
+    int cw = get_text_width_scaled(cls, 0.5);
+    writeln_scaled(cls, bx + (btnW - cw) / 2, btnY + 40, 0.5, true, COL_BLACK);
+
+    epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+    epd_poweroff();
+}
+
+void handleStatsTouch(int x, int y) {
+    int cardX = 25, cardY = 40, cardW = P_WIDTH - 50, cardH = 880;
+    int btnY = cardY + cardH - 100;
+    int btnW = 180, btnH = 60;
+    int bx = cardX + (cardW - btnW) / 2;
+
+    if (DEBUG_ON) Serial.printf("StatsTouch: (%d,%d) | Target: X(%d-%d) Y(%d-%d)\n", x, y, bx, bx+btnW, btnY, btnY+btnH);
+
+    // 1. Check if Dismiss Button was clicked
+    if (y >= btnY && y <= btnY + btnH && x >= bx && x <= bx + btnW) {
+        // Flash Feedback
+        Rect_t btnArea = {
+            .x = (int32_t)(960 - 1 - (btnY + btnH)),
+            .y = (int32_t)bx,
+            .width = (uint32_t)btnH,
+            .height = (uint32_t)btnW
+        };
+        epd_poweron();
+        epd_push_pixels(btnArea, 30, 0); // Black flash
+        epd_poweroff();
+
+        showTransitionEffect();
+        appState = STATE_LIBRARY;
+        updateLibrary();
+        return;
+    } 
+    
+    // 2. Check if user tapped outside the Master Card
+    if (x < cardX || x > cardX + cardW || y < cardY || y > cardY + cardH) {
+        showTransitionEffect();
+        appState = STATE_LIBRARY;
+        updateLibrary();
+        return;
+    }
+}
+
 // --- Direct Touch Action Logic ---
 
 void handleTouchAction(int x, int y) {
+    if (appState == STATE_STATS) {
+        handleStatsTouch(x, y);
+        return;
+    }
+    if (appState == STATE_LOCK || appState == STATE_SET_PIN) {
+        handlePinTouch(x, y);
+        return;
+    }
     if (appState == STATE_READING) {
         // Bottom Menu Area (Buttons)
         if (y >= BTN_Y_POS - 10 && y <= BTN_Y_POS + BUTTON_H + 10) {
@@ -342,6 +691,14 @@ void handleTouchAction(int x, int y) {
         }
     }
     else if (appState == STATE_LIBRARY) {
+        // Header Tap -> Stats Dashboard
+        if (y < 90) {
+            showTransitionEffect();
+            appState = STATE_STATS;
+            drawStatsDashboard();
+            return;
+        }
+
         if (!books.empty()) {
             int page = librarySelection / SHELF_BOOKS_PER_PAGE;
             int startIdx = page * SHELF_BOOKS_PER_PAGE;
@@ -504,6 +861,7 @@ void handleNext() {
         if (lastPageByteCount > 0) {
             pageHistory.push_back(textPos);
             textPos += lastPageByteCount;
+            trackReadingActivity();
             updateReader(true);
         } else {
             updateReader(true);
@@ -514,20 +872,46 @@ void handleNext() {
 void showEnhancedSplash() {
     epd_poweron(); 
     epd_clear(); 
-    memset(framebuffer, COL_WHITE, L_WIDTH * L_HEIGHT / 2);
+    memset(framebuffer, COL_BLACK, L_WIDTH * L_HEIGHT / 2);
     
-    int titleY = 350;
-    const char* title = "GhostPage";
-    int titleW = get_text_width_scaled(title, 2.2);
-    writeln_scaled(title, (P_WIDTH - titleW) / 2, titleY, 2.2, true, COL_BLACK);
-    
-    const char* tagline = "Your Personal E-Reader";
-    int tagW = get_text_width_scaled(tagline, 0.8);
-    writeln_scaled(tagline, (P_WIDTH - tagW) / 2, titleY + 70, 0.8, false, COL_GRAY);
-    
-    draw_line_rotated(100, titleY + 120, P_WIDTH - 100, titleY + 120, COL_BLACK);
+    int startY = 60;
+    int lineH = 30;
+    float fs = 0.45;
 
-    epd_draw_grayscale_image(epd_full_screen(), framebuffer); 
+    // Penguin ASCII (Simple)
+    writeln_scaled("    .--.", 40, startY, fs, true, COL_WHITE);
+    writeln_scaled("   |o_o |", 40, startY + 25, fs, true, COL_WHITE);
+    writeln_scaled("   |:_/ |", 40, startY + 50, fs, true, COL_WHITE);
+    writeln_scaled("  //   \\ \\", 40, startY + 75, fs, true, COL_WHITE);
+    writeln_scaled(" (|     | )", 40, startY + 100, fs, true, COL_WHITE);
+    writeln_scaled("/'\\_   _/`\\", 40, startY + 125, fs, true, COL_WHITE);
+    writeln_scaled("\\___)=(___/", 40, startY + 150, fs, true, COL_WHITE);
+
+    const char* logs[] = {
+        "[    0.000000] GhostPage Kernel 1.0.0-gp-esp32s3",
+        "[    0.000000] CPU: ESP32-S3 (revision v0.2) 240MHz",
+        "[    0.042183] mem: PSRAM detected, initializing allocator",
+        "[    0.152910] vfs: Mounting SD card (FAT32) ... [ OK ]",
+        "[    0.284102] input: GT911 Capacitive Touch Driver active",
+        "[    0.410293] display: LilyGo EPD 4.7-Inch initialized",
+        "[    0.592811] rtc: PCF8563 external clock synchronized",
+        "[    0.712003] ghost: Loading user preferences (vellum)",
+        "[    0.854192] ghost: Checking partitions ... [ OK ]",
+        "[    1.102938] ghost: Starting bookshelf-daemon",
+        "[    1.254102] ghost: Security subsystem active",
+        "",
+        "GhostPage Login: ghostpage (automatic login)",
+        "Password: * * * *",
+        "Last login: Sun Feb 08 2026 on tty1"
+    };
+
+    for (int i = 0; i < 15; i++) {
+        writeln_scaled(logs[i], 180, startY + (i * lineH), fs, false, COL_WHITE);
+        // Partial push for each log to simulate terminal scrolling
+        epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+        delay(80);
+    }
+
     epd_poweroff();
 }
 
@@ -586,28 +970,45 @@ void setup() {
         Serial.println(F("GT911 Touch NOT found."));
     }
 
-    appState = STATE_SPLASH;
-    showEnhancedSplash();
+    // PIN and State initialization
+    activePin = prefs.getString("saved_pin", "");
+    
+    // Check if we woke up from deep sleep or if it's a fresh boot
+    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED) {
+        if (activePin == "") {
+            appState = STATE_SET_PIN;
+            Serial.println(F("DEBUG: Fresh Boot - No PIN found. Starting SETUP."));
+        } else {
+            appState = STATE_LOCK;
+            Serial.println(F("DEBUG: Fresh Boot - PIN found. Starting LOCK."));
+        }
+    } else {
+        Serial.println(F("DEBUG: Woke up from Deep Sleep. Restoring state."));
+    }
+
+    epd_poweron();
+    epd_clear(); 
+    
+    if (appState == STATE_LOCK || appState == STATE_SET_PIN) {
+        drawPinPad(appState == STATE_SET_PIN);
+    } else if (appState == STATE_LIBRARY) {
+        updateLibrary();
+    } else if (appState == STATE_READING) {
+        updateReader(false);
+    }
+    
     lastInteraction = millis();
-    Serial.println(F("DEBUG: Setup complete. Starting loop."));
 }
 
 void loop() { 
     static unsigned long lastBeat = 0;
     if (millis() - lastBeat > 1000) {
-        // Serial.printf("DEBUG: System Running. State: %d, Time: %lu\n", appState, millis());
         lastBeat = millis();
     }
 
-    if (appState == STATE_SPLASH) {
-        unsigned long timeElapsed = millis() - lastInteraction;
-        if (timeElapsed > 5000) {
-            Serial.println(F("DEBUG: Splash timeout reached. Transitioning..."));
-            appState = STATE_LIBRARY; // Update state first
-            showTransitionEffect();
-            updateLibrary();
-            lastInteraction = millis();
-        }
+    // Deep Sleep Logic (10 Minutes total inactivity)
+    if (millis() - lastInteraction > 600000) {
+        goToDeepSleep();
     }
 
     // Header sync
@@ -630,7 +1031,7 @@ void loop() {
                 
                 if (DEBUG_ON) Serial.printf("Touch: Raw(%d,%d) -> Mapped(%d,%d)\n", tx[0], ty[0], mappedX, mappedY);
 
-                if (appState != STATE_SPLASH) {
+                if (appState != STATE_SPLASH && appState != STATE_LOCK && appState != STATE_SET_PIN) {
                     lastInteraction = millis();
                     showTapFeedback(mappedX, mappedY);
                 }

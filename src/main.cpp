@@ -139,19 +139,20 @@ void redrawReaderText() {
 }
 
 void updateReaderMenu(bool showMenu) {
-    // 1. Calculate Menu Position
+    // 1. Calculate Full Main Body Area (matching reader.cpp)
     int boxTop = 80;
     int boxBottom = 820;
-    int menuW = 240;
-    int menuH = 450; 
-    int x = (P_WIDTH - menuW) / 2;
-    int y = boxTop + (boxBottom - boxTop - menuH) / 2;
+    int boxMargin = 15;
+    int menuX = boxMargin;
+    int menuY = boxTop;
+    int menuW = P_WIDTH - 2 * boxMargin;
+    int menuH = boxBottom - boxTop;
 
     if (showMenu) {
-        // 2. Physical Mapping for Flash (Portrait -> Landscape)
+        // 2. Physical Mapping for Full Area Flash
         Rect_t menuArea = {
-            .x = (int32_t)(960 - 1 - (y + menuH)),
-            .y = (int32_t)x,
+            .x = (int32_t)(960 - 1 - (menuY + menuH)),
+            .y = (int32_t)menuX,
             .width = (int32_t)menuH,
             .height = (int32_t)menuW
         };
@@ -162,20 +163,25 @@ void updateReaderMenu(bool showMenu) {
             epd_push_pixels(menuArea, 50, 1);
         }
 
-        // --- CLEAN WHITE MINIMALIST MENU (NO BORDERS) ---
-        fill_rect_rotated(x, y, menuW, menuH, COL_WHITE);
+        // --- CLEAN WHITE CARD MENU (Full Size) ---
+        fill_rect_rotated(menuX, menuY, menuW, menuH, COL_WHITE);
+        
+        // Double Border to match reader style
+        draw_rounded_rect(menuX, menuY, menuW, menuH, 8, COL_BLACK);
+        draw_rounded_rect(menuX + 2, menuY + 2, menuW - 4, menuH - 4, 7, COL_BLACK);
 
         int bh = menuH / 5;
         int vCenterOffset = (bh / 2) + 15;
 
         const char* labels[] = {"FONT +", "FONT -", "REFRESH", "RESET", "BACK"};
         for (int i = 0; i < 5; i++) {
-            float scale = 0.8;
+            float scale = 1.0; // Larger text for larger menu
             int tw = get_text_width_scaled(labels[i], scale);
-            writeln_scaled(labels[i], x + (menuW - tw) / 2, y + (i * bh) + vCenterOffset, scale, true, COL_BLACK);
-            // Subtle separators
+            writeln_scaled(labels[i], menuX + (menuW - tw) / 2, menuY + (i * bh) + vCenterOffset, scale, true, COL_BLACK);
+            
+            // Decorative separators
             if (i < 4) {
-                draw_line_rotated(x + 20, y + (i + 1) * bh, x + menuW - 20, y + (i + 1) * bh, COL_LIGHT);
+                draw_line_rotated(menuX + 40, menuY + (i + 1) * bh, menuX + menuW - 40, menuY + (i + 1) * bh, COL_LIGHT);
             }
         }
 
@@ -238,12 +244,13 @@ void handleTouchAction(int x, int y) {
         }
     } 
     else if (appState == STATE_READER_OPTIONS) {
-        int menuW = 230;
-        int menuH = 450;
-        int menuX = (P_WIDTH - menuW) / 2;
         int boxTop = 80;
         int boxBottom = 820;
-        int menuY = boxTop + (boxBottom - boxTop - menuH) / 2;
+        int boxMargin = 15;
+        int menuX = boxMargin;
+        int menuY = boxTop;
+        int menuW = P_WIDTH - 2 * boxMargin;
+        int menuH = boxBottom - boxTop;
 
         if (x >= menuX && x <= menuX + menuW && y >= menuY && y <= menuY + menuH) {
             int bh = menuH / 5;
@@ -370,7 +377,7 @@ void handleTouchAction(int x, int y) {
             if (localY < bh) {
                 // OPEN: Open book normally
                 librarySelection = focusedBookIndex;
-                showTransitionEffect();
+                focusedBookIndex = -1;
                 openBook();
                 return;
             }
@@ -379,14 +386,13 @@ void handleTouchAction(int x, int y) {
                 String key = getPrefKey(books[focusedBookIndex]);
                 prefs.remove(key.c_str());
                 
-                // Explicitly reset global state for this book
+                librarySelection = focusedBookIndex;
                 textPos = 0;
                 pageHistory.clear();
-                librarySelection = focusedBookIndex;
+                focusedBookIndex = -1;
                 
                 if (DEBUG_ON) Serial.println(F("DEBUG: Progress Reset - Starting from 0"));
                 
-                showTransitionEffect();
                 openBook();
                 return;
             }

@@ -146,28 +146,27 @@ void updateLibrary() {
     memset(framebuffer, COL_WHITE, L_WIDTH * L_HEIGHT / 2);
 
     const char* header = "MY LIBRARY";
-    int headerY = 75; // Adjusted for larger bar
-    fill_rect_rotated(0, 0, P_WIDTH, 90, COL_BLACK); // Increased height from 70 to 90
-    int hw = get_text_width_scaled(header, 1.5); // Increased scale from 1.2 to 1.5
-    writeln_scaled(header, (P_WIDTH - hw) / 2, headerY, 1.5, true, COL_WHITE);
+    fill_rect_rotated(0, 0, P_WIDTH, 90, COL_BLACK); 
+    
+    // 1. Smaller Title (Scale 0.9) centered
+    float titleScale = 0.9;
+    int hw = get_text_width_scaled(header, titleScale);
+    writeln_scaled(header, (P_WIDTH - hw) / 2, 45, titleScale, true, COL_WHITE);
+    
+    // 2. Combined Info Line (Count | Battery) centered
+    float infoScale = 0.45;
+    float batt = getBatteryVoltage();
+    char infoStr[64];
+    if (!books.empty()) {
+        sprintf(infoStr, "%d books  |  %.2fV", (int)books.size(), batt);
+    } else {
+        sprintf(infoStr, "%.2fV", batt);
+    }
+    int iw = get_text_width_scaled(infoStr, infoScale);
+    writeln_scaled(infoStr, (P_WIDTH - iw) / 2, 75, infoScale, false, COL_WHITE);
     
     // Header Separator Line
-    draw_line_rotated(0, 90, P_WIDTH, 90, COL_BLACK); // Adjusted from 70 to 90
-    
-    int lineY = 105; // Pushed down from 85
-    int lineLen = 200;
-    draw_line_rotated((P_WIDTH - lineLen) / 2, lineY, (P_WIDTH + lineLen) / 2, lineY, COL_WHITE);
-    
-    float batt = getBatteryVoltage();
-    char battStr[16]; sprintf(battStr, "%.2fV", batt);
-    int battW = get_text_width_scaled(battStr, 0.6);
-    writeln_scaled(battStr, P_WIDTH - 30 - battW, headerY, 0.6, true, COL_WHITE);
-    
-    if (!books.empty()) {
-        char countStr[32];
-        sprintf(countStr, "%d books", books.size());
-        writeln_scaled(countStr, 35, headerY, 0.5, false, COL_WHITE);
-    }
+    draw_line_rotated(0, 90, P_WIDTH, 90, COL_BLACK); 
 
     if (books.empty()) {
         int msgY = 350;

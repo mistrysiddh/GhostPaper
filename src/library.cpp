@@ -79,12 +79,13 @@ void drawEnhancedBookCover(int x, int y, String title, int progress, int bookInd
     
     // Draw title (multiline if needed, but strictly clipped)
     int tX = x + 15;
-    int tY = y + 180;
+    int tY = y + 175; // Slightly higher to account for larger text
     int maxW = BOOK_W - 30;
+    float titleScale = 0.7; // Increased from 0.55
     
     String line1 = title;
     String line2 = "";
-    int w1 = get_text_width_scaled(line1.c_str(), 0.55);
+    int w1 = get_text_width_scaled(line1.c_str(), titleScale);
     
     if (w1 > maxW) {
         // Find split point
@@ -101,10 +102,10 @@ void drawEnhancedBookCover(int x, int y, String title, int progress, int bookInd
         }
     }
     
-    writeln_scaled(line1.c_str(), tX, tY, 0.55, true, COL_BLACK);
+    writeln_scaled(line1.c_str(), tX, tY, titleScale, true, COL_BLACK);
     if (line2.length() > 0) {
-        if (line2.length() > 12) line2 = line2.substring(0, 10) + "...";
-        writeln_scaled(line2.c_str(), tX, tY + 24, 0.55, true, COL_BLACK);
+        if (line2.length() > 10) line2 = line2.substring(0, 8) + "..."; // Tighter clipping for larger text
+        writeln_scaled(line2.c_str(), tX, tY + 28, titleScale, true, COL_BLACK); // Increased line height to 28
     }
 
     // 7. Visual Progress Bar
@@ -145,15 +146,15 @@ void updateLibrary() {
     memset(framebuffer, COL_WHITE, L_WIDTH * L_HEIGHT / 2);
 
     const char* header = "MY LIBRARY";
-    int headerY = 65;
-    fill_rect_rotated(0, 0, P_WIDTH, 100, COL_BLACK);
-    int hw = get_text_width_scaled(header, 1.2);
-    writeln_scaled(header, (P_WIDTH - hw) / 2, headerY, 1.2, true, COL_WHITE);
+    int headerY = 75; // Adjusted for larger bar
+    fill_rect_rotated(0, 0, P_WIDTH, 90, COL_BLACK); // Increased height from 70 to 90
+    int hw = get_text_width_scaled(header, 1.5); // Increased scale from 1.2 to 1.5
+    writeln_scaled(header, (P_WIDTH - hw) / 2, headerY, 1.5, true, COL_WHITE);
     
     // Header Separator Line
-    draw_line_rotated(0, 100, P_WIDTH, 100, COL_BLACK); // Full width line below header
+    draw_line_rotated(0, 90, P_WIDTH, 90, COL_BLACK); // Adjusted from 70 to 90
     
-    int lineY = 85;
+    int lineY = 105; // Pushed down from 85
     int lineLen = 200;
     draw_line_rotated((P_WIDTH - lineLen) / 2, lineY, (P_WIDTH + lineLen) / 2, lineY, COL_WHITE);
     

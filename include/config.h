@@ -65,18 +65,10 @@
 
 
 // --- UI Layout Constants ---
-
-#define READER_MENU_HEIGHT 120
-
 #define BUTTON_W 130
-
 #define BUTTON_H 50
-
 #define BUTTON_GAP 20
-
-#define BTN_Y_POS (P_HEIGHT - READER_MENU_HEIGHT + 20)
-
-
+#define BTN_Y_POS 890
 
 // --- Colors ---
 
@@ -198,7 +190,23 @@
 
 
 
-#define SHELF_START_Y    115
+
+
+
+
+
+
+
+
+#define SHELF_START_Y    120
+
+
+
+
+
+
+
+
 
 
 

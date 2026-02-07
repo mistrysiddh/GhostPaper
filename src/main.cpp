@@ -11,7 +11,7 @@ RTC_DATA_ATTR AppState appState = STATE_SPLASH;
 RTC_DATA_ATTR int librarySelection = 0; 
 RTC_DATA_ATTR int currentFileIndex = -1;
 RTC_DATA_ATTR long textPos = 0;
-RTC_DATA_ATTR float fontScale = 1.0;
+RTC_DATA_ATTR float fontScale = 1.15;
 RTC_DATA_ATTR long lastPageByteCount = 0;
 RTC_DATA_ATTR int focusedBookIndex = -1;
 
@@ -134,12 +134,65 @@ void updateBookCardMenu(int index, bool showMenu) {
     epd_poweroff();
 }
 
+void redrawReaderText() {
+    updateReader(false);
+}
+
+void updateReaderMenu(bool showMenu) {
+    // 1. Calculate Menu Position
+    int boxTop = 80;
+    int boxBottom = 820;
+    int menuW = 240;
+    int menuH = 450; 
+    int x = (P_WIDTH - menuW) / 2;
+    int y = boxTop + (boxBottom - boxTop - menuH) / 2;
+
+    if (showMenu) {
+        // 2. Physical Mapping for Flash (Portrait -> Landscape)
+        Rect_t menuArea = {
+            .x = (int32_t)(960 - 1 - (y + menuH)),
+            .y = (int32_t)x,
+            .width = (int32_t)menuH,
+            .height = (int32_t)menuW
+        };
+
+        epd_poweron();
+        // --- PHYSICAL WASH (Library Style) ---
+        for (int i = 0; i < 3; i++) {
+            epd_push_pixels(menuArea, 50, 1);
+        }
+
+        // --- CLEAN WHITE MINIMALIST MENU (NO BORDERS) ---
+        fill_rect_rotated(x, y, menuW, menuH, COL_WHITE);
+
+        int bh = menuH / 5;
+        int vCenterOffset = (bh / 2) + 15;
+
+        const char* labels[] = {"FONT +", "FONT -", "REFRESH", "RESET", "BACK"};
+        for (int i = 0; i < 5; i++) {
+            float scale = 0.8;
+            int tw = get_text_width_scaled(labels[i], scale);
+            writeln_scaled(labels[i], x + (menuW - tw) / 2, y + (i * bh) + vCenterOffset, scale, true, COL_BLACK);
+            // Subtle separators
+            if (i < 4) {
+                draw_line_rotated(x + 20, y + (i + 1) * bh, x + menuW - 20, y + (i + 1) * bh, COL_LIGHT);
+            }
+        }
+
+        epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+        epd_poweroff();
+    } else {
+        redrawReaderText();
+    }
+}
+
 // --- Direct Touch Action Logic ---
 
 void handleTouchAction(int x, int y) {
     if (appState == STATE_READING) {
         // Bottom Menu Area (Buttons)
         if (y >= BTN_Y_POS - 10 && y <= BTN_Y_POS + BUTTON_H + 10) {
+            // ... (keep button logic)
             int mbx = (P_WIDTH - (3 * BUTTON_W + 2 * BUTTON_GAP)) / 2;
             
             // Back Button
@@ -166,7 +219,79 @@ void handleTouchAction(int x, int y) {
                 return;
             }
         }
+        // Main Body Area - Trigger Menu (with Flash Feedback)
+        else if (y > 80 && y < 820) {
+            // Flash Feedback for the tap area
+            Rect_t tapArea = {
+                .x = (int32_t)(960 - 1 - (y + 100)),
+                .y = (int32_t)(x - 50),
+                .width = 200,
+                .height = 100
+            };
+            epd_poweron();
+            epd_push_pixels(tapArea, 30, 0); // Black flash
+            epd_poweroff();
+
+            appState = STATE_READER_OPTIONS;
+            updateReaderMenu(true);
+            return;
+        }
     } 
+    else if (appState == STATE_READER_OPTIONS) {
+        int menuW = 230;
+        int menuH = 450;
+        int menuX = (P_WIDTH - menuW) / 2;
+        int boxTop = 80;
+        int boxBottom = 820;
+        int menuY = boxTop + (boxBottom - boxTop - menuH) / 2;
+
+        if (x >= menuX && x <= menuX + menuW && y >= menuY && y <= menuY + menuH) {
+            int bh = menuH / 5;
+            int localY = y - menuY;
+            int slot = localY / bh;
+
+            if (slot == 0) { // FONT +
+                fontScale += 0.1;
+                if (fontScale > 2.5) fontScale = 2.5;
+                prefs.putFloat("fscale", fontScale);
+                appState = STATE_READING;
+                updateReader(false);
+                return;
+            }
+            else if (slot == 1) { // FONT -
+                fontScale -= 0.1;
+                if (fontScale < 0.4) fontScale = 0.4;
+                prefs.putFloat("fscale", fontScale);
+                appState = STATE_READING;
+                updateReader(false);
+                return;
+            }
+            else if (slot == 2) { // REFRESH
+                appState = STATE_READING;
+                forceFullRefresh();
+                return;
+            }
+            else if (slot == 3) { // RESET
+                String key = getPrefKey(books[currentFileIndex]);
+                prefs.remove(key.c_str());
+                textPos = 0;
+                pageHistory.clear();
+                appState = STATE_READING;
+                updateReader(false);
+                return;
+            }
+            else { // BACK
+                appState = STATE_READING;
+                updateReaderMenu(false);
+                return;
+            }
+        } else {
+            // Tap outside -> Close menu
+            appState = STATE_READING;
+            updateReaderMenu(false);
+            return;
+        }
+    }
     else if (appState == STATE_LIBRARY) {
         if (!books.empty()) {
             int page = librarySelection / SHELF_BOOKS_PER_PAGE;
@@ -253,8 +378,14 @@ void handleTouchAction(int x, int y) {
                 // RESET: Delete progress and open
                 String key = getPrefKey(books[focusedBookIndex]);
                 prefs.remove(key.c_str());
-                if (DEBUG_ON) Serial.println(F("DEBUG: Progress Reset"));
+                
+                // Explicitly reset global state for this book
+                textPos = 0;
+                pageHistory.clear();
                 librarySelection = focusedBookIndex;
+                
+                if (DEBUG_ON) Serial.println(F("DEBUG: Progress Reset - Starting from 0"));
+                
                 showTransitionEffect();
                 openBook();
                 return;

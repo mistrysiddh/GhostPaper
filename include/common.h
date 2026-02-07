@@ -11,7 +11,7 @@
 #include "config.h"
 
 // --- State ---
-enum AppState { STATE_SPLASH, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS };
+enum AppState { STATE_SPLASH, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS, STATE_READER_OPTIONS };
 extern RTC_DATA_ATTR AppState appState;
 extern RTC_DATA_ATTR int librarySelection; 
 extern RTC_DATA_ATTR int targetBookIndex;
@@ -45,6 +45,10 @@ float getBatteryVoltage();
 String getTimeString();
 void scanFiles(String path);
 void showTransitionEffect();
+void updateBookCardMenu(int index, bool showMenu);
+void updateReaderMenu(bool showMenu);
+void redrawReaderText();
+void forceFullRefresh();
 void updateBookCardMenu(int index, bool showMenu);
 
 // --- Graphics Prototypes ---

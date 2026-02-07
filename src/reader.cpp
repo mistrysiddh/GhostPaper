@@ -7,32 +7,33 @@ const int MAX_PARTIAL_BEFORE_FULL = 5;  // Full refresh every 5 partial updates
 void partialUpdateHeader() {
     if (appState != STATE_READING) return;
     
-    // For LilyGo-EPD47, we'll use a fast B&W update for the header
-    // Define the header area to update
+    // Define the header area to update in PHYSICAL landscape coordinates
+    // y=0 in portrait (top) is the RIGHT side in physical landscape if not swapped, 
+    // but the driver handles the mapping. Let's use the same logic as library/reader.
     Rect_t area = {
         .x = 0,
         .y = 0,
         .width = (uint32_t)L_WIDTH,
-        .height = 100
+        .height = 70
     };
 
     epd_poweron();
     
-    // Clear the header area
-    epd_clear_area(area);
+    // No epd_clear_area - we draw the whole stripe to avoid flashing
     
     uint8_t black = COL_BLACK;
 
-    // Redraw Battery Voltage
+    // Redraw Battery Voltage into the framebuffer
     float batt = getBatteryVoltage();
     char battStr[16]; 
     sprintf(battStr, "%.2fV", batt);
     int battW = get_text_width_scaled(battStr, 0.5);
+    
+    // We update the framebuffer first, then push to screen
     writeln_scaled(battStr, P_WIDTH - 35 - battW, 40, 0.5, true, black);
     
-    // Fast B&W update of the header area only
-    // Note: We draw directly to screen after clearing
-    epd_draw_image(area, framebuffer, BLACK_ON_WHITE);
+    // Push the grayscale stripe to avoid the B&W flash
+    epd_draw_grayscale_image(area, framebuffer);
     
     epd_poweroff();
 }
@@ -60,7 +61,7 @@ void updateReader(bool partial_refresh) {
     File f = SD.open(books[currentFileIndex]);
     if (f) {
         // --- 1. Header (Clean & Modern) ---
-        int headerH = 100;
+        int headerH = 70;
         draw_line_rotated(30, headerH, P_WIDTH - 30, headerH, black);
 
         // Title
@@ -77,14 +78,36 @@ void updateReader(bool partial_refresh) {
         int battW = get_text_width_scaled(battStr, 0.5);
         writeln_scaled(battStr, P_WIDTH - 35 - battW, 40, 0.5, true, black);
 
-        // --- 2. Main Text Area ---
+        // --- 2. Main Text Area (Enhanced Card Style) ---
+        int boxTop = 80;
+        int boxBottom = 820;
+        int boxMargin = 15;
+        int boxW = P_WIDTH - 2 * boxMargin;
+        int boxH = boxBottom - boxTop;
+
+        // 1. Soft Drop Shadow
+        fill_rect_rotated(boxMargin + 4, boxTop + 4, boxW, boxH, COL_GRAY);
+
+        // 2. Main Background (White card)
+        fill_rect_rotated(boxMargin, boxTop, boxW, boxH, COL_WHITE);
+
+        // 3. Decorative Double Border
+        draw_rounded_rect(boxMargin, boxTop, boxW, boxH, 8, black);
+        draw_rounded_rect(boxMargin + 2, boxTop + 2, boxW - 4, boxH - 4, 7, black);
+
+        // Text rendering coordinates (nested inside the border)
+        int textStartX = boxMargin + 20;
+        int textStartY = boxTop + 45; 
+        int textMaxWidth = P_WIDTH - boxMargin - 20;
+        int textMaxHeight = boxBottom - 20; 
+
         f.seek(textPos);
         const int bufSize = 5001; 
         char *buf = (char*)malloc(bufSize);
         if (buf) {
             int r = f.readBytes(buf, bufSize - 1); 
             buf[r] = '\0';
-            lastPageByteCount = renderPage(buf, 35, 115, P_WIDTH - 35, P_HEIGHT - 130); 
+            lastPageByteCount = renderPage(buf, textStartX, textStartY, textMaxWidth, textMaxHeight); 
             free(buf);
         }
 
@@ -115,7 +138,7 @@ void updateReader(bool partial_refresh) {
         }
 
         // Navigation Buttons (Clean Style)
-        int btnY = footerY + 45;
+        int btnY = BTN_Y_POS;
         int mbx = (P_WIDTH - (3 * BUTTON_W + 2 * BUTTON_GAP)) / 2;
 
         const char* btnLabels[] = {"Back", "Prev", "Next"};

@@ -102,27 +102,29 @@ void updateBookCardMenu(int index, bool showMenu) {
     }
 
     if (showMenu) {
-        // --- PREMIUM MENU DESIGN ---
-        // 1. Light Gray Backdrop
-        fill_rect_rotated(x, y, BOOK_W, BOOK_H, COL_LIGHT);
-        draw_rect_rotated(x, y, BOOK_W, BOOK_H, COL_BLACK); // Outer border
+        // --- CLEAN WHITE MINIMALIST MENU (NO BORDERS) ---
+        fill_rect_rotated(x, y, BOOK_W, BOOK_H, COL_WHITE);
 
         int bh = BOOK_H / 3;
+        int vCenterOffset = (bh / 2) + 15; // Vertical center approximation for baseline
 
-        // Button 1: READ (Primary) - Bold & Large
-        writeln_scaled("READ", x + 35, y + 45, 1.0, true, COL_BLACK);
+        // Slot 1: READ
+        const char* tRead = "READ";
+        float sRead = 1.0;
+        int wRead = get_text_width_scaled(tRead, sRead);
+        writeln_scaled(tRead, x + (BOOK_W - wRead) / 2, y + vCenterOffset, sRead, true, COL_BLACK);
         
-        // Hairline Separator (Padding on sides)
-        draw_line_rotated(x + 20, y + bh, x + BOOK_W - 20, y + bh, COL_GRAY);
-
-        // Button 2: RESET (Secondary)
-        writeln_scaled("RESET", x + 35, y + bh + 45, 0.8, true, COL_BLACK);
+        // Slot 2: RESET
+        const char* tReset = "RESET";
+        float sReset = 0.8;
+        int wReset = get_text_width_scaled(tReset, sReset);
+        writeln_scaled(tReset, x + (BOOK_W - wReset) / 2, y + bh + vCenterOffset, sReset, true, COL_BLACK);
         
-        // Hairline Separator
-        draw_line_rotated(x + 20, y + 2 * bh, x + BOOK_W - 20, y + 2 * bh, COL_GRAY);
-
-        // Button 3: BACK (Tertiary) - Gray Text
-        writeln_scaled("BACK", x + 35, y + 2 * bh + 45, 0.8, true, COL_GRAY);
+        // Slot 3: BACK
+        const char* tBack = "BACK";
+        float sBack = 0.8;
+        int wBack = get_text_width_scaled(tBack, sBack);
+        writeln_scaled(tBack, x + (BOOK_W - wBack) / 2, y + 2 * bh + vCenterOffset, sBack, true, COL_BLACK);
     }
 
     // Refresh the entire Stripe (works for both menu and cover restoration)

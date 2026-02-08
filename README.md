@@ -10,9 +10,9 @@ GhostPage is a high-performance, minimalist E-Ink operating system designed for 
 
 | | | |
 |:---:|:---:|:---:|
-| ![Step 1](images/01.heic) | ![Step 2](images/02.heic) | ![Step 3](images/03.heic) |
-| ![Step 4](images/04.heic) | ![Step 5](images/05.heic) | ![Step 6](images/06.heic) |
-| ![Step 7](images/07.heic) | | |
+| ![Step 1](images/01.jpg) | ![Step 2](images/02.jpg) | ![Step 3](images/03.jpg) |
+| ![Step 4](images/04.jpg) | ![Step 5](images/05.jpg) | ![Step 6](images/06.jpg) |
+| ![Step 7](images/07.jpg) | | |
 
 ## ✨ Features
 

@@ -67,7 +67,7 @@ void updateReader(bool partial_refresh) {
         // --- 2. Main Text Area (Clean Thin Border Style) ---
         int boxTop = 80;
         int boxBottom = 820;
-        int boxMargin = 15;
+        int boxMargin = 25; // Increased from 15 to add 10px margin
         int boxW = P_WIDTH - 2 * boxMargin;
         int boxH = boxBottom - boxTop;
 

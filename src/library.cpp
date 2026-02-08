@@ -79,33 +79,43 @@ void drawEnhancedBookCover(int x, int y, String title, int progress, int bookInd
     
     // Draw title (multiline if needed, but strictly clipped)
     int tX = x + 15;
-    int tY = y + 175; // Slightly higher to account for larger text
+    int tY = y + 175; 
     int maxW = BOOK_W - 30;
-    float titleScale = 0.7; // Increased from 0.55
+    float titleScale = 0.65; // Slightly smaller to prevent overflow (was 0.7)
     
     String line1 = title;
     String line2 = "";
     int w1 = get_text_width_scaled(line1.c_str(), titleScale);
     
     if (w1 > maxW) {
-        // Find split point
-        int splitIdx = title.length() / 2;
-        while (splitIdx < title.length() && title[splitIdx] != ' ') splitIdx++;
-        if (splitIdx < title.length()) {
+        // Find best split point (last space before limit)
+        int splitIdx = -1;
+        for (int j = 0; j < (int)title.length(); j++) {
+            if (title[j] == ' ') {
+                if (get_text_width_scaled(title.substring(0, j).c_str(), titleScale) < maxW) {
+                    splitIdx = j;
+                } else break;
+            }
+        }
+
+        if (splitIdx != -1) {
              line1 = title.substring(0, splitIdx);
              line2 = title.substring(splitIdx + 1);
         } else {
-             // Force split
-             splitIdx = title.length() / 2;
-             line1 = title.substring(0, splitIdx);
-             line2 = title.substring(splitIdx);
+             // Force split if no space found
+             int charLimit = 12; 
+             line1 = title.substring(0, charLimit);
+             line2 = title.substring(charLimit);
         }
     }
     
+    // Strict clipping for both lines
+    if (get_text_width_scaled(line1.c_str(), titleScale) > maxW) line1 = line1.substring(0, 10) + "..";
+    
     writeln_scaled(line1.c_str(), tX, tY, titleScale, true, COL_BLACK);
     if (line2.length() > 0) {
-        if (line2.length() > 10) line2 = line2.substring(0, 8) + "..."; // Tighter clipping for larger text
-        writeln_scaled(line2.c_str(), tX, tY + 28, titleScale, true, COL_BLACK); // Increased line height to 28
+        if (get_text_width_scaled(line2.c_str(), titleScale) > maxW) line2 = line2.substring(0, 10) + "..";
+        writeln_scaled(line2.c_str(), tX, tY + 28, titleScale, true, COL_BLACK);
     }
 
     // 7. Visual Progress Bar
@@ -139,93 +149,231 @@ void drawEnhancedBookCover(int x, int y, String title, int progress, int bookInd
 }
 
 void updateLibrary() {
+
     if (DEBUG_ON) Serial.println(F("[UI] Rendering Enhanced Bookshelf Library..."));
+
     
+
+    // Refresh the filtered list before drawing
+
+    applyLibraryFilter();
+
+
+
     epd_poweron();
+
     epd_clear(); 
+
     memset(framebuffer, COL_WHITE, L_WIDTH * L_HEIGHT / 2);
 
-    const char* header = "MY LIBRARY";
-    fill_rect_rotated(0, 0, P_WIDTH, 90, COL_BLACK); 
-    
-    // 1. Smaller Title (Scale 0.9) centered
-    float titleScale = 0.9;
-    int hw = get_text_width_scaled(header, titleScale);
-    writeln_scaled(header, (P_WIDTH - hw) / 2, 45, titleScale, true, COL_WHITE);
-    
-    // 2. Combined Info Line (Count | Battery) centered
-    float infoScale = 0.45;
-    float batt = getBatteryVoltage();
-    char infoStr[64];
-    if (!books.empty()) {
-        sprintf(infoStr, "%d books  |  %.2fV", (int)books.size(), batt);
-    } else {
-        sprintf(infoStr, "%.2fV", batt);
-    }
-    int iw = get_text_width_scaled(infoStr, infoScale);
-    writeln_scaled(infoStr, (P_WIDTH - iw) / 2, 75, infoScale, false, COL_WHITE);
-    
-    // Header Separator Line
-    draw_line_rotated(0, 90, P_WIDTH, 90, COL_BLACK); 
 
-    if (books.empty()) {
-        int msgY = 350;
-        int emptyIconSize = 100;
-        int emptyIconX = (P_WIDTH - emptyIconSize) / 2;
-        int emptyIconY = msgY - 150;
-        fill_rect_rotated(emptyIconX, emptyIconY, emptyIconSize, emptyIconSize + 20, COL_LIGHT);
-        draw_rounded_rect(emptyIconX, emptyIconY, emptyIconSize, emptyIconSize + 20, 5, COL_DARK);
-        fill_rect_rotated(emptyIconX, emptyIconY, 18, emptyIconSize + 20, COL_DARK);
-        const char* msg = "Your Library is Empty";
-        const char* sub = "Add .txt files to your SD card";
-        int mw = get_text_width_scaled(msg, 0.9);
-        int sw = get_text_width_scaled(sub, 0.6);
-        writeln_scaled(msg, (P_WIDTH - mw)/2, msgY, 0.9, true, COL_BLACK);
-        writeln_scaled(sub, (P_WIDTH - sw)/2, msgY + 45, 0.6, false, COL_DARK);
-    } else {
-        int page = librarySelection / SHELF_BOOKS_PER_PAGE;
-        int startIdx = page * SHELF_BOOKS_PER_PAGE;
-        for (int i = 0; i < SHELF_BOOKS_PER_PAGE; i++) {
-            int idx = startIdx + i;
-            if (idx >= (int)books.size()) break;
-            int col = i % SHELF_COLS;
-            int row = i / SHELF_COLS;
-            int x = GAP_X + col * (BOOK_W + GAP_X);
-            int y = SHELF_START_Y + row * (BOOK_H + GAP_Y);
-            long savedPos = prefs.getLong(getPrefKey(books[idx]).c_str(), 0);
-            long totalSize = 1;
-            File f = SD.open(books[idx]);
-            if (f) { totalSize = f.size(); f.close(); }
-            int pct = (totalSize > 0) ? (savedPos * 100 / totalSize) : 0;
-            drawEnhancedBookCover(x, y, books[idx].substring(books[idx].lastIndexOf('/')+1), pct, idx);
-            if (idx == librarySelection) {
-                draw_rounded_rect(x - 6, y - 6, BOOK_W + 12, BOOK_H + 12, 10, COL_BLACK);
-                draw_rounded_rect(x - 5, y - 5, BOOK_W + 10, BOOK_H + 10, 9, COL_BLACK);
-                draw_rounded_rect(x - 4, y - 4, BOOK_W + 8, BOOK_H + 8, 8, COL_DARK);
-            }
+
+    // --- 1. Header (Centered Design) ---
+
+    const char* header = "MY LIBRARY";
+
+    fill_rect_rotated(0, 0, P_WIDTH, 90, COL_BLACK); 
+
+    
+
+    float titleScale = 0.9;
+
+    int hw = get_text_width_scaled(header, titleScale);
+
+    writeln_scaled(header, (P_WIDTH - hw) / 2, 45, titleScale, true, COL_WHITE);
+
+    
+
+    float infoScale = 0.4;
+
+    float batt = getBatteryVoltage();
+
+    char infoStr[64];
+
+    sprintf(infoStr, "%d items  |  %.2fV", (int)filteredBooks.size(), batt);
+
+    int iw = get_text_width_scaled(infoStr, infoScale);
+
+    writeln_scaled(infoStr, (P_WIDTH - iw) / 2, 75, infoScale, false, COL_WHITE);
+
+    
+
+    // --- 2. Filter Tabs (ALL | NEW | READING | FINISHED) ---
+
+    int tabY = 125;
+
+    const char* tabs[] = {"ALL", "NEW", "READING", "FINISHED"};
+
+    int tabW = P_WIDTH / 4;
+
+    for (int i = 0; i < 4; i++) {
+
+        int tx = i * tabW;
+
+        if (libraryFilter == i) {
+
+            fill_rect_rotated(tx + 5, tabY - 25, tabW - 10, 40, COL_BLACK);
+
+            int tw = get_text_width_scaled(tabs[i], 0.4);
+
+            writeln_scaled(tabs[i], tx + (tabW - tw) / 2, tabY, 0.4, true, COL_WHITE);
+
+        } else {
+
+            draw_rounded_rect(tx + 5, tabY - 25, tabW - 10, 40, 5, COL_BLACK);
+
+            int tw = get_text_width_scaled(tabs[i], 0.4);
+
+            writeln_scaled(tabs[i], tx + (tabW - tw) / 2, tabY, 0.4, false, COL_BLACK);
+
         }
-        int footerY = P_HEIGHT - 55;
-        int totalPages = (books.size() + SHELF_BOOKS_PER_PAGE - 1) / SHELF_BOOKS_PER_PAGE;
-        char pgStr[32];
-        sprintf(pgStr, "Page %d of %d", page + 1, totalPages);
-        int pillW = 160;
-        int pillH = 40;
-        int pillX = (P_WIDTH - pillW) / 2;
-        fill_rect_rotated(pillX, footerY, pillW, pillH, COL_BLACK);
-        draw_rounded_rect(pillX, footerY, pillW, pillH, 20, COL_DARK);
-        int tw = get_text_width_scaled(pgStr, 0.55);
-        writeln_scaled(pgStr, pillX + (pillW - tw)/2, footerY + 27, 0.55, true, COL_WHITE);
+
     }
+
+
+
+    if (filteredBooks.empty()) {
+
+        int msgY = 450;
+
+        const char* msg = "No books in this category";
+
+        int mw = get_text_width_scaled(msg, 0.7);
+
+        writeln_scaled(msg, (P_WIDTH - mw)/2, msgY, 0.7, true, COL_BLACK);
+
+    } else {
+
+        // Adjust selection if it goes out of bounds for the filtered list
+
+        if (librarySelection >= (int)filteredBooks.size()) librarySelection = filteredBooks.size() - 1;
+
+        if (librarySelection < 0) librarySelection = 0;
+
+
+
+        int page = librarySelection / SHELF_BOOKS_PER_PAGE;
+
+        int startIdx = page * SHELF_BOOKS_PER_PAGE;
+
+        
+
+        // Push the shelf start lower to account for tabs
+
+        int shelfStartY = SHELF_START_Y + 40; 
+
+
+
+        for (int i = 0; i < SHELF_BOOKS_PER_PAGE; i++) {
+
+            int idx = startIdx + i;
+
+            if (idx >= (int)filteredBooks.size()) break;
+
+            int col = i % SHELF_COLS;
+
+            int row = i / SHELF_COLS;
+
+            int x = GAP_X + col * (BOOK_W + GAP_X);
+
+            int y = shelfStartY + row * (BOOK_H + GAP_Y);
+
+            
+
+            long savedPos = prefs.getLong(getPrefKey(filteredBooks[idx]).c_str(), 0);
+
+            long totalSize = 1;
+
+            File f = SD.open(filteredBooks[idx]);
+
+            if (f) { totalSize = f.size(); f.close(); }
+
+            int pct = (totalSize > 0) ? (savedPos * 100 / totalSize) : 0;
+
+            
+
+            drawEnhancedBookCover(x, y, filteredBooks[idx].substring(filteredBooks[idx].lastIndexOf('/')+1), pct, idx);
+
+            if (idx == librarySelection) {
+
+                draw_rounded_rect(x - 6, y - 6, BOOK_W + 12, BOOK_H + 12, 10, COL_BLACK);
+
+                draw_rounded_rect(x - 4, y - 4, BOOK_W + 8, BOOK_H + 8, 8, COL_DARK);
+
+            }
+
+        }
+
+        
+
+        int footerY = P_HEIGHT - 55;
+
+        int totalPages = (filteredBooks.size() + SHELF_BOOKS_PER_PAGE - 1) / SHELF_BOOKS_PER_PAGE;
+
+        char pgStr[32];
+
+        sprintf(pgStr, "Page %d of %d", page + 1, totalPages);
+
+        int pillW = 160;
+
+        int pillH = 40;
+
+        int pillX = (P_WIDTH - pillW) / 2;
+
+        fill_rect_rotated(pillX, footerY, pillW, pillH, COL_BLACK);
+
+        draw_rounded_rect(pillX, footerY, pillW, pillH, 20, COL_DARK);
+
+        int tw = get_text_width_scaled(pgStr, 0.55);
+
+        writeln_scaled(pgStr, pillX + (pillW - tw)/2, footerY + 27, 0.55, true, COL_WHITE);
+
+    }
+
     epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+
     epd_poweroff();
+
 }
 
+
+
 void openBook() {
-    if (books.empty() || librarySelection >= (int)books.size()) return;
-    currentFileIndex = librarySelection;
+
+    if (filteredBooks.empty() || librarySelection >= (int)filteredBooks.size()) return;
+
+    
+
+    // Find the actual path from the filtered list
+
+    String path = filteredBooks[librarySelection];
+
+    
+
+    // Find its index in the master 'books' list for consistent reference
+
+    for (int i=0; i < (int)books.size(); i++) {
+
+        if (books[i] == path) {
+
+            currentFileIndex = i;
+
+            break;
+
+        }
+
+    }
+
+
+
     textPos = prefs.getLong(getPrefKey(books[currentFileIndex]).c_str(), 0);
+
     appState = STATE_READING;
+
     pageHistory.clear();
+
     epd_poweron(); epd_clear(); epd_poweroff();
+
     updateReader();
+
 }

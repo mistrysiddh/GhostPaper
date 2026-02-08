@@ -10,25 +10,20 @@ GhostPage is a high-performance, minimalist E-Ink operating system designed for 
 
 ### 📚 Premium Reading Experience
 - **Bookshelf UI**: A clean, grid-based library with "Enhanced Card" styling.
-- **Contextual Menus**: Tap any book for instant options (Read, Reset Progress, Delete).
+- **Smart Organization**: Automatic folders for **NEW**, **READING**, and **FINISHED** books.
+- **GhostDrop (Wireless Sync)**: WiFi-powered book uploads via a simple web interface and QR code.
 - **Ultra-Fast Engine**: Optimized `.txt` rendering with customizable font scaling.
-- **Global Touch Feedback**: Responsive, circular "physical wash" indicators for every interaction.
+- **Anti-Ghosting**: Innovative "Physical Wash" technology for secure, trace-free page turns and menu transitions.
 
 ### 🔒 Privacy & Security
-- **Secure Lock Screen**: A "Master Card" style PIN pad that protects your library.
-- **Mandatory Setup**: Forces a custom 4-digit PIN creation on first boot.
-- **Anti-Ghosting Keypad**: Innovative localized refresh technology for secure, trace-free PIN entry.
-- **Auto-Lock**: Automatically secures the device after 5 minutes of inactivity.
-
-### 📊 Analytics Dashboard
-- **Reading Stats**: Tracks your "Day Streak" and "Total Pages Read".
-- **Activity Heatmap**: Visualizes your reading habits over the last 7 days.
-- **Automatic Logging**: Silently tracks progress as you turn pages.
+- **Borderless Master Lock**: A sleek, minimalist PIN pad that protects your library.
+- **Mandatory Setup**: Guided custom 4-digit PIN creation on first boot.
+- **Adaptive Auto-Lock**: Automatically secures the device after 5 minutes.
 
 ### 🔋 Extreme Power Efficiency
-- **Deep Sleep Mode**: Automatically enters zero-power deep sleep after 10 minutes.
-- **Instant Resume**: Wakes up instantly to your last page with a single button press.
-- **Weeks of Battery**: Optimized for long-term usage without charging.
+- **Deep Sleep Mode**: Automatically enters zero-power deep sleep after 10 minutes of inactivity.
+- **Instant Resume**: Wakes up instantly to your last page with a single button press (**IO21**).
+- **Zero-Power Display**: Holds the last screen indefinitely without consuming battery.
 
 ## 🛠 Hardware Support
 
@@ -52,15 +47,16 @@ Specifically optimized for the **LilyGo T5-47 S3** (4.7-inch E-Paper display).
 
 ### Global
 - **Tap**: Select / Act.
-- **Hardware Button (IO21)**: Wake from Sleep.
+- **Hardware Button (IO21)**: Wake from Deep Sleep.
 
 ### Library
-- **Tap Header**: Open **Analytics Dashboard**.
-- **Tap Footer**: Change bookshelf pages.
+- **Tap Header**: Start **GhostDrop Sync** (WiFi Upload).
+- **Tab Bar**: Filter by **ALL**, **NEW**, **READING**, or **FINISHED**.
+- **Tap Book**: Open book options (READ, RESET, DELETE, BACK).
 
 ### Reader
-- **Tap Text**: Open **Reader Menu** (Font +/-, Refresh, Reset).
+- **Tap Text**: Open **Reader Menu** (Font +/-, Refresh, Sync).
 - **Tap Bottom Buttons**: Navigation (Back, Prev, Next).
 
 ---
-*GhostPage OS v1.1 - Crafted for the love of reading.*
+*GhostPage OS v1.2 - Crafted for the love of reading.*

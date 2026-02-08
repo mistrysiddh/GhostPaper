@@ -2,12 +2,18 @@
 #include <WiFi.h>
 #include <Button2.h>
 #include <math.h> 
+#include <WebServer.h>
+#include <ESPmDNS.h>
+#include <qrcode.h>
 
 // --- Configuration ---
 const unsigned long TOUCH_COOLDOWN = 300; 
 
 // --- Global Variable Definitions ---
+WebServer server(80);
+File uploadFile;
 RTC_DATA_ATTR AppState appState = STATE_SPLASH;
+RTC_DATA_ATTR LibFilter libraryFilter = FILTER_ALL;
 RTC_DATA_ATTR int librarySelection = 0; 
 RTC_DATA_ATTR int currentFileIndex = -1;
 RTC_DATA_ATTR long textPos = 0;
@@ -17,6 +23,7 @@ RTC_DATA_ATTR int focusedBookIndex = -1;
 
 uint8_t *framebuffer = NULL;
 std::vector<String> books;
+std::vector<String> filteredBooks;
 Preferences prefs;
 Button2 smartBtn;
 TouchDrvGT911 touch;
@@ -95,7 +102,7 @@ void redrawBookCover(int index) {
     int col = localIdx % SHELF_COLS;
     int row = localIdx / SHELF_COLS;
     int x = GAP_X + col * (BOOK_W + GAP_X);
-    int y = SHELF_START_Y + row * (BOOK_H + GAP_Y);
+    int y = (SHELF_START_Y + 40) + row * (BOOK_H + GAP_Y);
 
     long savedPos = prefs.getLong(getPrefKey(books[index]).c_str(), 0);
     long totalSize = 1;
@@ -114,7 +121,7 @@ void updateBookCardMenu(int index, bool showMenu) {
     int col = localIdx % SHELF_COLS;
     int row = localIdx / SHELF_COLS;
     int x = GAP_X + col * (BOOK_W + GAP_X);
-    int y = SHELF_START_Y + row * (BOOK_H + GAP_Y);
+    int y = (SHELF_START_Y + 40) + row * (BOOK_H + GAP_Y);
 
     // 2. Physical Mapping (Portrait -> Landscape 960x540)
     int32_t physY = x;
@@ -147,26 +154,29 @@ void updateBookCardMenu(int index, bool showMenu) {
         // --- CLEAN WHITE MINIMALIST MENU (NO BORDERS) ---
         fill_rect_rotated(x, y, BOOK_W, BOOK_H, COL_WHITE);
 
-        int bh = BOOK_H / 3;
-        int vCenterOffset = (bh / 2) + 15; // Vertical center approximation for baseline
+        int bh = BOOK_H / 4; 
+        int vCenterOffset = (bh / 2) + 12; // Adjusted for precise vertical center
+        float optScale = 0.75;
 
         // Slot 1: READ
         const char* tRead = "READ";
-        float sRead = 1.0;
-        int wRead = get_text_width_scaled(tRead, sRead);
-        writeln_scaled(tRead, x + (BOOK_W - wRead) / 2, y + vCenterOffset, sRead, true, COL_BLACK);
+        int wRead = get_text_width_scaled(tRead, optScale);
+        writeln_scaled(tRead, x + (BOOK_W - wRead) / 2, y + vCenterOffset, optScale, true, COL_BLACK);
         
         // Slot 2: RESET
         const char* tReset = "RESET";
-        float sReset = 0.8;
-        int wReset = get_text_width_scaled(tReset, sReset);
-        writeln_scaled(tReset, x + (BOOK_W - wReset) / 2, y + bh + vCenterOffset, sReset, true, COL_BLACK);
+        int wReset = get_text_width_scaled(tReset, optScale);
+        writeln_scaled(tReset, x + (BOOK_W - wReset) / 2, y + bh + vCenterOffset, optScale, true, COL_BLACK);
+
+        // Slot 3: DELETE
+        const char* tDel = "DELETE";
+        int wDel = get_text_width_scaled(tDel, optScale);
+        writeln_scaled(tDel, x + (BOOK_W - wDel) / 2, y + 2 * bh + vCenterOffset, optScale, true, COL_BLACK);
         
-        // Slot 3: BACK
+        // Slot 4: BACK
         const char* tBack = "BACK";
-        float sBack = 0.8;
-        int wBack = get_text_width_scaled(tBack, sBack);
-        writeln_scaled(tBack, x + (BOOK_W - wBack) / 2, y + 2 * bh + vCenterOffset, sBack, true, COL_BLACK);
+        int wBack = get_text_width_scaled(tBack, optScale);
+        writeln_scaled(tBack, x + (BOOK_W - wBack) / 2, y + 3 * bh + vCenterOffset, optScale, true, COL_BLACK);
     }
 
     // Refresh the entire Stripe (works for both menu and cover restoration)
@@ -215,7 +225,7 @@ void updateReaderMenu(bool showMenu) {
         int bh = menuH / 5;
         int vCenterOffset = (bh / 2) + 15;
 
-        const char* labels[] = {"FONT +", "FONT -", "REFRESH", "RESET", "BACK"};
+        const char* labels[] = {"FONT +", "FONT -", "REFRESH", "SYNC", "BACK"};
         for (int i = 0; i < 5; i++) {
             float scale = 1.0; // Larger text for larger menu
             int tw = get_text_width_scaled(labels[i], scale);
@@ -241,40 +251,33 @@ void drawPinPad(bool settingNew) {
     epd_poweron();
     memset(framebuffer, COL_WHITE, L_WIDTH * L_HEIGHT / 2);
 
-    // --- Master Security Card ---
+    // --- Master Security Card (Borderless) ---
     int cardW = 460;
     int cardH = 820;
     int cardX = (P_WIDTH - cardW) / 2;
     int cardY = 70;
 
-    // 1. Shadow & Background
-    fill_rect_rotated(cardX + 6, cardY + 6, cardW, cardH, COL_GRAY);
+    // 1. Pure White Background (No Shadow, No Border)
     fill_rect_rotated(cardX, cardY, cardW, cardH, COL_WHITE);
     
-    // 2. Double Premium Border
-    draw_rounded_rect(cardX, cardY, cardW, cardH, 12, COL_BLACK);
-    draw_rounded_rect(cardX + 2, cardY + 2, cardW - 4, cardH - 4, 11, COL_BLACK);
-
-    // 3. Header Section (Dark Bar)
+    // 2. Header Section (Dark Bar)
     fill_rect_rotated(cardX + 15, cardY + 15, cardW - 30, 80, COL_BLACK);
     const char* title = settingNew ? "SETUP SECURITY" : "SECURE ACCESS";
     int tw = get_text_width_scaled(title, 0.75);
     writeln_scaled(title, cardX + (cardW - tw) / 2, cardY + 68, 0.75, true, COL_WHITE);
 
-    // 4. PIN Dots Section
+    // 3. PIN Dots Section
     int dotRadius = 12;
     int dotGap = 45;
     int dotTotalW = (4 * 2 * dotRadius) + (3 * dotGap);
     int dotStartX = cardX + (cardW - dotTotalW) / 2 + dotRadius;
     int dotY = cardY + 160;
     
-    // Decorative instructions for setup
+    // Instructions for setup (without line)
     if (settingNew) {
         const char* sub = "Create a 4-digit PIN";
         int sw = get_text_width_scaled(sub, 0.45);
         writeln_scaled(sub, cardX + (cardW - sw) / 2, dotY + 65, 0.45, false, COL_BLACK);
-    } else {
-        draw_line_rotated(cardX + 100, dotY + 40, cardX + cardW - 100, dotY + 40, COL_LIGHT);
     }
 
     for (int i = 0; i < 4; i++) {
@@ -330,44 +333,51 @@ void handlePinTouch(int x, int y) {
     int kw = 110, kh = 100;
     int kGapX = 25, kGapY = 20;
     
-    // Calculate Grid Start positions
     int gridStartX = cardX + (cardW - (3 * kw + 2 * kGapX)) / 2;
     int gridStartY = cardY + 260;
 
-    // Check if touch is within the grid bounds first
+    if (DEBUG_ON) Serial.printf("PinTouch: (%d,%d) | GridStart: (%d,%d)\n", x, y, gridStartX, gridStartY);
+
     if (x < gridStartX || y < gridStartY) return;
 
-    // Calculate relative coordinates
     int relX = x - gridStartX;
     int relY = y - gridStartY;
-
-    // Calculate column and row indices
     int col = relX / (kw + kGapX);
     int row = relY / (kh + kGapY);
 
-    // Validate indices (3 cols, 4 rows)
     if (col >= 3 || row >= 4) return;
 
-    // Check if touch is inside the button (accounting for gap)
     int offsetInCol = relX % (kw + kGapX);
     int offsetInRow = relY % (kh + kGapY);
-    if (offsetInCol > kw || offsetInRow > kh) return; // Touched the gap
+    if (offsetInCol > kw || offsetInRow > kh) return; 
 
-    // Map row/col to key index
     int i = row * 3 + col;
     if (i >= 12) return;
 
     static const char* keys[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "CLR", "0", "OK"};
     String val = keys[i];
+    
+    if (DEBUG_ON) Serial.printf("Pin Key: %s (Row:%d Col:%d)\n", val.c_str(), row, col);
 
+    // Flash Feedback for specific button
+    Rect_t btnArea = {
+        .x = (int32_t)(960 - 1 - (gridStartY + row * (kh + kGapY) + kh)),
+        .y = (int32_t)(gridStartX + col * (kw + kGapX)),
+        .width = (uint32_t)kh,
+        .height = (uint32_t)kw
+    };
+    epd_poweron();
+    epd_push_pixels(btnArea, 30, 0); // Quick black flash
+    
+    // Targeted Physical Wash for Card
     Rect_t masterArea = {
-        .x = (int32_t)(960 - 1 - (cardY + 820)), // 820 is cardH
+        .x = (int32_t)(960 - 1 - (cardY + 820)), 
         .y = (int32_t)cardX,
         .width = (uint32_t)820,
         .height = (uint32_t)cardW
     };
-    epd_poweron();
     for (int w = 0; w < 2; w++) epd_push_pixels(masterArea, 50, 1);
+    epd_poweroff();
 
     if (val == "CLR") enteredPin = "";
     else if (val == "OK") {
@@ -409,180 +419,156 @@ void goToDeepSleep() {
     esp_deep_sleep_start();
 }
 
-// --- Reading Statistics Logic ---
+// --- GhostDrop (WiFi Transfer) Logic ---
 
-void trackReadingActivity() {
-    RTC_Date date = rtc.getDateTime();
-    int today = date.day;
-    int month = date.month;
-    
-    // Simple key: stats_MMDD (e.g., stats_208 for Feb 8)
-    char dateKey[16];
-    sprintf(dateKey, "stats_%d%02d", month, today);
-    
-    // 1. Increment daily pages
-    int pages = prefs.getInt(dateKey, 0);
-    prefs.putInt(dateKey, pages + 1);
-    
-    // 2. Increment global total
-    int total = prefs.getInt("stat_total", 0);
-    prefs.putInt("stat_total", total + 1);
-    
-    // 3. Streak Logic
-    int lastRead = prefs.getInt("last_read_day", -1);
-    if (lastRead != today) {
-        // New day!
-        int streak = prefs.getInt("stat_streak", 0);
-        
-        // Very basic streak check (doesn't handle month rollover perfectly for simplicity)
-        // Ideally we'd use Epoch time, but for this demo:
-        if (lastRead == today - 1 || (lastRead == -1)) {
-            prefs.putInt("stat_streak", streak + 1);
-        } else if (lastRead != today) {
-            // Missed a day (or same day, handled above)
-            // If it wasn't yesterday, reset streak (unless first run)
-            if (lastRead > 0 && lastRead != today) prefs.putInt("stat_streak", 1);
-        }
-        
-        prefs.putInt("last_read_day", today);
-    }
-}
-
-void drawStatsDashboard() {
-    int cardX = 30;
-    int cardY = 50;
-    int cardW = P_WIDTH - 60;
-    int cardH = 860;
-
-    // --- PHYSICAL WASH (Library Style) ---
-    // Wash the dashboard area before drawing to prevent ghosting
-    Rect_t washArea = {
-        .x = (int32_t)(960 - 1 - (cardY + cardH)),
-        .y = (int32_t)cardX,
-        .width = (uint32_t)cardH,
-        .height = (uint32_t)cardW
-    };
+void drawGhostDropUI(String statusMsg) {
     epd_poweron();
-    for (int i = 0; i < 3; i++) {
-        epd_push_pixels(washArea, 50, 1);
-    }
-
     memset(framebuffer, COL_WHITE, L_WIDTH * L_HEIGHT / 2);
 
-    // --- 1. Master Container Card ---
-    fill_rect_rotated(cardX, cardY, cardW, cardH, COL_WHITE);
+    int cardX = 30, cardY = 50, cardW = P_WIDTH - 60, cardH = 860;
     draw_rounded_rect(cardX, cardY, cardW, cardH, 12, COL_BLACK);
-    draw_rounded_rect(cardX + 2, cardY + 2, cardW - 4, cardH - 4, 11, COL_BLACK);
+    draw_rounded_rect(cardX+2, cardY+2, cardW-4, cardH-4, 11, COL_BLACK);
 
-    // Header Bar inside Master Card
-    fill_rect_rotated(cardX + 15, cardY + 15, cardW - 30, 70, COL_BLACK);
-    const char* title = "GHOSTPAGE ANALYTICS";
-    int tw = get_text_width_scaled(title, 0.6);
-    writeln_scaled(title, cardX + (cardW - tw) / 2, cardY + 60, 0.6, true, COL_WHITE);
+    // Header
+    fill_rect_rotated(cardX + 15, cardY + 15, cardW - 30, 80, COL_BLACK);
+    const char* title = "GHOSTDROP SYNC";
+    int tw = get_text_width_scaled(title, 0.8);
+    writeln_scaled(title, cardX + (cardW - tw) / 2, cardY + 70, 0.8, true, COL_WHITE);
 
-    // --- 2. Streak Card (Nested) ---
-    int streakY = cardY + 110;
-    int sCardH = 220;
-    fill_rect_rotated(cardX + 30, streakY, cardW - 60, sCardH, COL_WHITE);
-    draw_rounded_rect(cardX + 30, streakY, cardW - 60, sCardH, 8, COL_BLACK);
-    draw_rounded_rect(cardX + 32, streakY + 2, cardW - 64, sCardH - 4, 7, COL_BLACK);
+    // Status Message
+    int sw = get_text_width_scaled(statusMsg.c_str(), 0.55);
+    writeln_scaled(statusMsg.c_str(), cardX + (cardW - sw) / 2, cardY + 160, 0.55, true, COL_BLACK);
 
-    int streak = prefs.getInt("stat_streak", 0);
-    char streakStr[16]; sprintf(streakStr, "%d", streak);
-    int sw = get_text_width_scaled(streakStr, 3.0);
-    writeln_scaled(streakStr, cardX + (cardW - sw) / 2, streakY + 140, 3.0, true, COL_BLACK);
-    
-    const char* lbl1 = "CURRENT DAY STREAK";
-    int lw = get_text_width_scaled(lbl1, 0.45);
-    writeln_scaled(lbl1, cardX + (cardW - lw) / 2, streakY + 185, 0.45, false, COL_GRAY);
+    if (WiFi.status() == WL_CONNECTED) {
+        String url = "http://" + WiFi.localIP().toString();
+        int uw = get_text_width_scaled(url.c_str(), 0.6);
+        writeln_scaled(url.c_str(), cardX + (cardW - uw) / 2, cardY + 210, 0.6, true, COL_BLACK);
 
-    // --- 3. Progress Card (Nested) ---
-    int progY = streakY + sCardH + 30;
-    int pCardH = 120;
-    fill_rect_rotated(cardX + 30, progY, cardW - 60, pCardH, COL_WHITE);
-    draw_rounded_rect(cardX + 30, progY, cardW - 60, pCardH, 8, COL_BLACK);
-    draw_rounded_rect(cardX + 32, progY + 2, cardW - 64, pCardH - 4, 7, COL_BLACK);
+        // QR Code
+        QRCode qrcode;
+        uint8_t qrbits[qrcode_getBufferSize(3)];
+        qrcode_initText(&qrcode, qrbits, 3, ECC_LOW, url.c_str());
+        
+        int qrSize = 300;
+        int qrX = cardX + (cardW - qrSize) / 2;
+        int qrY = cardY + 280;
+        int scale = qrSize / qrcode.size;
 
-    int total = prefs.getInt("stat_total", 0);
-    char totStr[32]; sprintf(totStr, "%d Pages Read", total);
-    int ttw = get_text_width_scaled(totStr, 0.65);
-    writeln_scaled(totStr, cardX + (cardW - ttw) / 2, progY + 75, 0.65, true, COL_BLACK);
-
-    // --- 4. Activity Heatmap Card (Nested) ---
-    int gridY = progY + pCardH + 30;
-    int gCardH = 260;
-    fill_rect_rotated(cardX + 30, gridY, cardW - 60, gCardH, COL_WHITE);
-    draw_rounded_rect(cardX + 30, gridY, cardW - 60, gCardH, 8, COL_BLACK);
-    draw_rounded_rect(cardX + 32, gridY + 2, cardW - 64, gCardH - 4, 7, COL_BLACK);
-
-    const char* hTitle = "30-DAY ACTIVITY HEATMAP";
-    int htw = get_text_width_scaled(hTitle, 0.45);
-    writeln_scaled(hTitle, cardX + (cardW - htw) / 2, gridY + 45, 0.45, true, COL_BLACK);
-
-    int cellSize = 35;
-    int cellGap = 8;
-    int cols = 7;
-    int rows = 4;
-    int gridStartX = cardX + (cardW - (cols * (cellSize + cellGap))) / 2;
-    int innerGridY = gridY + 80;
-
-    for (int r = 0; r < rows; r++) {
-        for (int c = 0; c < cols; c++) {
-            int cx = gridStartX + c * (cellSize + cellGap);
-            int cy = innerGridY + r * (cellSize + cellGap);
-            int activity = (r * cols + c) % 5; 
-            if (activity == 0) draw_rounded_rect(cx, cy, cellSize, cellSize, 4, COL_LIGHT);
-            else if (activity < 3) fill_rect_rotated(cx, cy, cellSize, cellSize, COL_LIGHT);
-            else fill_rect_rotated(cx, cy, cellSize, cellSize, COL_BLACK);
+        for (uint8_t y = 0; y < qrcode.size; y++) {
+            for (uint8_t x = 0; x < qrcode.size; x++) {
+                if (qrcode_getModule(&qrcode, x, y)) {
+                    fill_rect_rotated(qrX + x * scale, qrY + y * scale, scale, scale, COL_BLACK);
+                }
+            }
         }
+        
+        const char* inst = "Scan to upload .txt files";
+        int iw = get_text_width_scaled(inst, 0.45);
+        writeln_scaled(inst, cardX + (cardW - iw) / 2, qrY + qrSize + 40, 0.45, false, COL_GRAY);
     }
 
-    // --- 5. Close Button (Card Style) ---
-    int btnY = gridY + gCardH + 30;
-    int btnW = 200;
-    int btnH = 60;
+    // Stop Button
+    int btnY = cardY + cardH - 100;
+    int btnW = 220;
     int bx = cardX + (cardW - btnW) / 2;
-    fill_rect_rotated(bx, btnY, btnW, btnH, COL_WHITE);
-    draw_rounded_rect(bx, btnY, btnW, btnH, 30, COL_BLACK);
-    
-    const char* cls = "DISMISS";
-    int cw = get_text_width_scaled(cls, 0.5);
-    writeln_scaled(cls, bx + (btnW - cw) / 2, btnY + 40, 0.5, true, COL_BLACK);
+    draw_rounded_rect(bx, btnY, btnW, 60, 30, COL_BLACK);
+    const char* stp = "STOP SYNC";
+    int stw = get_text_width_scaled(stp, 0.6);
+    writeln_scaled(stp, bx + (btnW - stw) / 2, btnY + 40, 0.6, true, COL_BLACK);
 
     epd_draw_grayscale_image(epd_full_screen(), framebuffer);
     epd_poweroff();
 }
 
-void handleStatsTouch(int x, int y) {
-    int cardX = 25, cardY = 40, cardW = P_WIDTH - 50, cardH = 880;
+void startGhostDrop() {
+    appState = STATE_GHOSTDROP;
+    
+    // --- PHYSICAL WASH (Consistent OS Style) ---
+    Rect_t fullArea = epd_full_screen();
+    epd_poweron();
+    for (int i = 0; i < 3; i++) {
+        epd_push_pixels(fullArea, 50, 1);
+    }
+    
+    drawGhostDropUI("Connecting to WiFi...");
+    
+    WiFi.begin(WIFI_SSID_1, WIFI_PASS_1);
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+        delay(500);
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+        server.on("/", HTTP_GET, []() {
+            String html = "<html><body style='font-family:sans-serif;padding:40px;'>";
+            html += "<h1>GhostDrop</h1><p>Select a .txt file to send to LilyGo:</p>";
+            html += "<form method='POST' action='/upload' enctype='multipart/form-data'>";
+            html += "<input type='file' name='upload' accept='.txt'><br><br>";
+            html += "<input type='submit' value='Upload' style='padding:10px 20px;'>";
+            html += "</form></body></html>";
+            server.send(200, "text/html", html);
+        });
+
+        server.on("/upload", HTTP_POST, []() {
+            server.send(200, "text/plain", "Upload Successful! You can send another or stop sync on the device.");
+        }, []() {
+            HTTPUpload& upload = server.upload();
+            if (upload.status == UPLOAD_FILE_START) {
+                String filename = "/" + upload.filename;
+                uploadFile = SD.open(filename, FILE_WRITE);
+            } else if (upload.status == UPLOAD_FILE_WRITE) {
+                if (uploadFile) uploadFile.write(upload.buf, upload.currentSize);
+            } else if (upload.status == UPLOAD_FILE_END) {
+                if (uploadFile) uploadFile.close();
+            }
+        });
+
+        server.begin();
+        drawGhostDropUI("ONLINE - READY");
+    } else {
+        drawGhostDropUI("Connection Failed!");
+        delay(2000);
+        stopGhostDrop();
+    }
+}
+
+void stopGhostDrop() {
+    server.stop();
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    
+    // --- PHYSICAL WASH ---
+    Rect_t fullArea = epd_full_screen();
+    epd_poweron();
+    for (int i = 0; i < 3; i++) {
+        epd_push_pixels(fullArea, 50, 1);
+    }
+
+    // Refresh the books list to include new uploads
+    books.clear();
+    scanFiles("/");
+
+    showTransitionEffect();
+    appState = STATE_LIBRARY;
+    updateLibrary();
+}
+
+void handleGhostDropTouch(int x, int y) {
+    int cardX = 30, cardY = 50, cardW = P_WIDTH - 60, cardH = 860;
     int btnY = cardY + cardH - 100;
-    int btnW = 180, btnH = 60;
+    int btnW = 220;
     int bx = cardX + (cardW - btnW) / 2;
 
-    if (DEBUG_ON) Serial.printf("StatsTouch: (%d,%d) | Target: X(%d-%d) Y(%d-%d)\n", x, y, bx, bx+btnW, btnY, btnY+btnH);
-
-    // 1. Check if Dismiss Button was clicked
-    if (y >= btnY && y <= btnY + btnH && x >= bx && x <= bx + btnW) {
-        showTransitionEffect();
-        appState = STATE_LIBRARY;
-        updateLibrary();
-        return;
-    } 
-    
-    // 2. Check if user tapped outside the Master Card
-    if (x < cardX || x > cardX + cardW || y < cardY || y > cardY + cardH) {
-        showTransitionEffect();
-        appState = STATE_LIBRARY;
-        updateLibrary();
-        return;
+    if (y > btnY && y < btnY + 60 && x > bx && x < bx + btnW) {
+        stopGhostDrop();
     }
 }
 
 // --- Direct Touch Action Logic ---
 
 void handleTouchAction(int x, int y) {
-    if (appState == STATE_STATS) {
-        handleStatsTouch(x, y);
+    if (appState == STATE_GHOSTDROP) {
+        handleGhostDropTouch(x, y);
         return;
     }
     if (appState == STATE_LOCK || appState == STATE_SET_PIN) {
@@ -661,13 +647,8 @@ void handleTouchAction(int x, int y) {
                 forceFullRefresh();
                 return;
             }
-            else if (slot == 3) { // RESET
-                String key = getPrefKey(books[currentFileIndex]);
-                prefs.remove(key.c_str());
-                textPos = 0;
-                pageHistory.clear();
-                appState = STATE_READING;
-                updateReader(false);
+            else if (slot == 3) { // SYNC
+                startGhostDrop();
                 return;
             }
             else { // BACK
@@ -682,106 +663,142 @@ void handleTouchAction(int x, int y) {
             return;
         }
     }
-    else if (appState == STATE_LIBRARY) {
-        // Header Tap -> Stats Dashboard
-        if (y < 90) {
-            showTransitionEffect();
-            appState = STATE_STATS;
-            drawStatsDashboard();
-            return;
-        }
-
-        if (!books.empty()) {
-            int page = librarySelection / SHELF_BOOKS_PER_PAGE;
-            int startIdx = page * SHELF_BOOKS_PER_PAGE;
-
-            // Check if touching a book cover
-            for (int i = 0; i < SHELF_BOOKS_PER_PAGE; i++) {
-                int col = i % SHELF_COLS;
-                int row = i / SHELF_COLS;
-
-                int xStart = GAP_X + col * (BOOK_W + GAP_X);
-                int yStart = SHELF_START_Y + row * (BOOK_H + GAP_Y);
-
-                if (x >= xStart - 10 && x <= xStart + BOOK_W + 10 && 
-                    y >= yStart - 10 && y <= yStart + BOOK_H + 10) {
+            else if (appState == STATE_LIBRARY) {
+                // --- Header Tap -> GhostDrop Sync ---
+                if (y < 90) {
+                    showTransitionEffect();
+                    startGhostDrop();
+                    return;
+                }
+        
+                // --- 1. Tab Bar Touch Detection ---
+        
+            if (y > 90 && y < 145) {
+                int tabW = P_WIDTH / 4;
+                int newFilter = x / tabW;
+                if (newFilter >= 0 && newFilter < 4) {
+                    libraryFilter = (LibFilter)newFilter;
+                    librarySelection = 0; // Reset scroll/selection
+                    updateLibrary();
+                    return;
+                }
+            }
+    
+            if (!filteredBooks.empty()) {
+                int page = librarySelection / SHELF_BOOKS_PER_PAGE;
+                int startIdx = page * SHELF_BOOKS_PER_PAGE;
+    
+                // Check if touching a book cover
+                for (int i = 0; i < SHELF_BOOKS_PER_PAGE; i++) {
+                    int col = i % SHELF_COLS;
+                    int row = i / SHELF_COLS;
+    
+                    int xStart = GAP_X + col * (BOOK_W + GAP_X);
+                    int yStart = (SHELF_START_Y + 40) + row * (BOOK_H + GAP_Y);
+    
+                    if (x >= xStart - 10 && x <= xStart + BOOK_W + 10 && 
+                        y >= yStart - 10 && y <= yStart + BOOK_H + 10) {
+                        
+                        int targetIdx = startIdx + i;
+                        if (targetIdx < (int)filteredBooks.size()) {
+                            focusedBookIndex = targetIdx;
+                            appState = STATE_BOOK_OPTIONS;
+                            updateBookCardMenu(focusedBookIndex, true);
+                        }
+                        return;
+                    }
+                }
+                
+                // Footer Tap for Page Navigation
+                if (y > P_HEIGHT - 115) {
+                    int totalPages = (filteredBooks.size() + SHELF_BOOKS_PER_PAGE - 1) / SHELF_BOOKS_PER_PAGE;
                     
-                    int targetIdx = startIdx + i;
-                    if (targetIdx < (int)books.size()) {
-                        focusedBookIndex = targetIdx;
-                        appState = STATE_BOOK_OPTIONS;
-                        updateBookCardMenu(focusedBookIndex, true);
+                    // Left side - Previous page
+                    if (x < P_WIDTH * 0.3 && page > 0) {
+                        librarySelection = max(0, librarySelection - SHELF_BOOKS_PER_PAGE);
+                        updateLibrary();
+                        return;
                     }
-                    return;
-                }
-            }
-            
-            // Footer Tap for Page Navigation
-            if (y > P_HEIGHT - 115) {
-                int totalPages = (books.size() + SHELF_BOOKS_PER_PAGE - 1) / SHELF_BOOKS_PER_PAGE;
-                
-                // Left side - Previous page
-                if (x < P_WIDTH * 0.3 && page > 0) {
-                    librarySelection = max(0, librarySelection - SHELF_BOOKS_PER_PAGE);
-                    updateLibrary();
-                    return;
-                }
-                // Right side - Next page
-                else if (x > P_WIDTH * 0.7 && page < totalPages - 1) {
-                    librarySelection += SHELF_BOOKS_PER_PAGE;
-                    if (librarySelection >= (int)books.size()) {
-                        librarySelection = ((int)books.size() - 1);
+                    // Right side - Next page
+                    else if (x > P_WIDTH * 0.7 && page < totalPages - 1) {
+                        librarySelection += SHELF_BOOKS_PER_PAGE;
+                        if (librarySelection >= (int)filteredBooks.size()) {
+                            librarySelection = ((int)filteredBooks.size() - 1);
+                        }
+                        updateLibrary();
+                        return;
                     }
-                    updateLibrary();
-                    return;
                 }
             }
         }
-    }
-    else if (appState == STATE_BOOK_OPTIONS) {
-
-        int localIdx = focusedBookIndex % SHELF_BOOKS_PER_PAGE;
-        int col = localIdx % SHELF_COLS;
-        int row = localIdx / SHELF_COLS;
-
-        int cardX = GAP_X + col * (BOOK_W + GAP_X);
-        int cardY = SHELF_START_Y + row * (BOOK_H + GAP_Y);
-
-        if (x >= cardX && x <= cardX + BOOK_W && y >= cardY && y <= cardY + BOOK_H) {
-            int bh = BOOK_H / 3;
-            int localY = y - cardY;
-
-            if (localY < bh) {
-                // OPEN: Open book normally
-                librarySelection = focusedBookIndex;
-                focusedBookIndex = -1;
-                openBook();
-                return;
+        else if (appState == STATE_BOOK_OPTIONS) {
+    
+            int localIdx = focusedBookIndex % SHELF_BOOKS_PER_PAGE;
+            int col = localIdx % SHELF_COLS;
+            int row = localIdx / SHELF_COLS;
+    
+            int cardX = GAP_X + col * (BOOK_W + GAP_X);
+            int cardY = (SHELF_START_Y + 40) + row * (BOOK_H + GAP_Y);
+    
+            if (x >= cardX && x <= cardX + BOOK_W && y >= cardY && y <= cardY + BOOK_H) {
+                int bh = BOOK_H / 4;
+                int localY = y - cardY;
+                int slot = localY / bh;
+    
+                if (slot == 0) { // READ
+                    librarySelection = focusedBookIndex;
+                    focusedBookIndex = -1;
+                    openBook();
+                    return;
+                }
+                else if (slot == 1) { // RESET
+                    String path = filteredBooks[focusedBookIndex];
+                    String key = getPrefKey(path);
+                    prefs.remove(key.c_str());
+                    
+                    // Find correct index in master list for openBook
+                    for(int i=0; i < (int)books.size(); i++) {
+                        if (books[i] == path) {
+                            librarySelection = focusedBookIndex;
+                            focusedBookIndex = -1;
+                            openBook();
+                            return;
+                        }
+                    }
+                }
+                else if (slot == 2) { // DELETE
+                    String path = filteredBooks[focusedBookIndex];
+                    if (SD.exists(path)) {
+                        SD.remove(path);
+                        String key = getPrefKey(path);
+                        prefs.remove(key.c_str());
+                        
+                        // Remove from master list
+                        for(auto it = books.begin(); it != books.end(); ++it) {
+                            if (*it == path) {
+                                books.erase(it);
+                                break;
+                            }
+                        }
+                        
+                        librarySelection = 0;
+                        focusedBookIndex = -1;
+                        
+                        showTransitionEffect();
+                        appState = STATE_LIBRARY;
+                        updateLibrary();
+                        return;
+                    }
+                }
+                else { // BACK
+                    appState = STATE_LIBRARY;
+                    redrawBookCover(focusedBookIndex);
+                    updateBookCardMenu(focusedBookIndex, false);
+                    focusedBookIndex = -1;
+                    return;
+                }
             }
-            else if (localY < 2 * bh) {
-                // RESET: Delete progress and open
-                String key = getPrefKey(books[focusedBookIndex]);
-                prefs.remove(key.c_str());
-                
-                librarySelection = focusedBookIndex;
-                textPos = 0;
-                pageHistory.clear();
-                focusedBookIndex = -1;
-                
-                if (DEBUG_ON) Serial.println(F("DEBUG: Progress Reset - Starting from 0"));
-                
-                openBook();
-                return;
-            }
-            else {
-                // BACK: Close menu
-                appState = STATE_LIBRARY;
-                redrawBookCover(focusedBookIndex);
-                updateBookCardMenu(focusedBookIndex, false);
-                focusedBookIndex = -1;
-                return;
-            }
-        } else {
+     else {
             // Tap outside -> Close menu
             appState = STATE_LIBRARY;
             redrawBookCover(focusedBookIndex);
@@ -829,6 +846,29 @@ String getPrefKey(String path) {
     return key;
 }
 
+void applyLibraryFilter() {
+    filteredBooks.clear();
+    for (const auto& path : books) {
+        if (libraryFilter == FILTER_ALL) {
+            filteredBooks.push_back(path);
+            continue;
+        }
+
+        long savedPos = prefs.getLong(getPrefKey(path).c_str(), 0);
+        long totalSize = 1;
+        File f = SD.open(path);
+        if (f) { totalSize = f.size(); f.close(); }
+
+        if (libraryFilter == FILTER_NEW) {
+            if (savedPos == 0) filteredBooks.push_back(path);
+        } else if (libraryFilter == FILTER_READING) {
+            if (savedPos > 0 && savedPos < (totalSize * 0.95)) filteredBooks.push_back(path);
+        } else if (libraryFilter == FILTER_FINISHED) {
+            if (savedPos >= (totalSize * 0.95)) filteredBooks.push_back(path);
+        }
+    }
+}
+
 void handleNext() {
     if (appState == STATE_LIBRARY) { 
         if (!books.empty()) { 
@@ -841,7 +881,6 @@ void handleNext() {
         if (lastPageByteCount > 0) {
             pageHistory.push_back(textPos);
             textPos += lastPageByteCount;
-            trackReadingActivity();
             updateReader(true);
         } else {
             updateReader(true);
@@ -896,11 +935,16 @@ void showEnhancedSplash() {
 }
 
 void setup() {
+    // 1. Immediate EPD Initialization (Ensures screen shows content after upload)
+    epd_init(); 
+    epd_poweron();
+    delay(200);
+    epd_clear(); // Initial physical reset of the display
+
     Serial.begin(115200);
-    delay(1000);
+    delay(500);
     Serial.println(F("\n--- GhostPage DIAGNOSTIC BOOT ---"));
     
-    epd_init(); 
     framebuffer = (uint8_t *)heap_caps_malloc(L_WIDTH * L_HEIGHT / 2, MALLOC_CAP_SPIRAM);
     if (framebuffer == NULL) {
         Serial.println(F("CRITICAL ERROR: PSRAM allocation failed for framebuffer!"));
@@ -966,9 +1010,6 @@ void setup() {
         Serial.println(F("DEBUG: Woke up from Deep Sleep. Restoring state."));
     }
 
-    epd_poweron();
-    epd_clear(); 
-    
     if (appState == STATE_LOCK || appState == STATE_SET_PIN) {
         drawPinPad(appState == STATE_SET_PIN);
     } else if (appState == STATE_LIBRARY) {
@@ -991,6 +1032,10 @@ void loop() {
         goToDeepSleep();
     }
 
+    if (appState == STATE_GHOSTDROP) {
+        server.handleClient();
+    }
+
     // Header sync
     static unsigned long lastHeaderUpdate = 0;
     if (appState == STATE_READING && (millis() - lastHeaderUpdate > 60000)) {
@@ -1011,9 +1056,7 @@ void loop() {
                 
                 if (DEBUG_ON) Serial.printf("Touch: Raw(%d,%d) -> Mapped(%d,%d)\n", tx[0], ty[0], mappedX, mappedY);
 
-                if (appState != STATE_SPLASH && appState != STATE_LOCK && appState != STATE_SET_PIN) {
-                    lastInteraction = millis();
-                }
+                lastInteraction = millis(); // Update for ALL states
 
                 handleTouchAction(mappedX, mappedY);
                 lastTouchTime = millis();

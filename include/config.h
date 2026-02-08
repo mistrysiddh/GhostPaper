@@ -2,11 +2,11 @@
 #define CONFIG_H
 
 // --- Debug ---
-#define DEBUG_ON false
+#define DEBUG_ON true
 
 // --- WiFi Settings ---
-#define WIFI_SSID_1 "YOUR_SSID"
-#define WIFI_PASS_1 "YOUR_PASSWORD"
+#define WIFI_SSID_1 "Mistry Siddh"
+#define WIFI_PASS_1 "hello@635241"
 
 #define WIFI_SSID_2 "OPTIONAL_SSID"
 #define WIFI_PASS_2 "OPTIONAL_PASSWORD"
@@ -15,8 +15,8 @@
 #define WIFI_PASS_3 "OPTIONAL_PASSWORD"
 
 // --- RSS Settings ---
-#define RSS_FEED_URL "http://feeds.bbci.co.uk/news/world/rss.xml" // Example: BBC World News
-#define MAX_ARTICLES 10 // Number of articles to fetch
+#define RSS_FEED_URL "http://feeds.bbci.co.uk/news/world/rss.xml"
+#define MAX_ARTICLES 10 
 
 // --- Time Settings ---
 #define NTP_SERVER "pool.ntp.org"

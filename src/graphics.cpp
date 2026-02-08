@@ -91,6 +91,16 @@ void draw_circle_rotated(int16_t xm, int16_t ym, int16_t r, uint8_t color) {
     draw_pixel_rotated(xm + r, ym, color);
 }
 
+void fill_circle_rotated(int16_t xm, int16_t ym, int16_t r, uint8_t color) {
+    for (int16_t y = -r; y <= r; y++) {
+        for (int16_t x = -r; x <= r; x++) {
+            if (x*x + y*y <= r*r) {
+                draw_pixel_rotated(xm + x, ym + y, color);
+            }
+        }
+    }
+}
+
 uint32_t decode_utf8(const char** s) {
     uint32_t cp = (unsigned char)**s;
     if (cp < 0x80) { (*s)++; return cp; }

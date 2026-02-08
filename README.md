@@ -60,5 +60,17 @@ Engineered exclusively for the **LilyGo T5-47 S3** (4.7-inch E-Paper display).
 - **Tap Text Area**: Quick-toggle the Reader Menu.
 - **Navigation Bar**: Dedicated **Back**, **Prev**, and **Next** buttons.
 
+## 🤝 Contributing
+
+We welcome contributions to GhostPage OS! When submitting changes, please follow this workflow:
+
+1. **Branch**: Create a feature branch for your changes.
+2. **Commit**: Keep commits atomic and use descriptive messages.
+   ```bash
+   git add .
+   git commit -m "feat: add [feature name]"
+   ```
+3. **Standards**: Ensure code follows existing patterns and includes necessary tests.
+
 ---
 *GhostPage OS v0.1 - Optimized for the love of reading.*

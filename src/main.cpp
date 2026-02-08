@@ -222,15 +222,15 @@ void updateLibraryMenu(bool showMenu) {
         draw_rect_rotated(menuX, menuY, menuW, menuH, COL_BLACK);
         draw_rect_rotated(menuX + 2, menuY + 2, menuW - 4, menuH - 4, COL_BLACK);
 
-        int bh = menuH / 5;
+        int bh = menuH / 6;
         int vCenterOffset = (bh / 2) + 15;
-        const char* labels[] = {"NEXT PAGE", "PREV PAGE", "REFRESH", "SYNC", "BACK"};
+        const char* labels[] = {"NEXT PAGE", "PREV PAGE", "REFRESH", "SYNC", "PRIVACY", "BACK"};
         
-        for (int i = 0; i < 5; i++) {
-            float scale = 0.8;
+        for (int i = 0; i < 6; i++) {
+            float scale = 0.75;
             int tw = get_text_width_scaled(labels[i], scale);
             writeln_scaled(labels[i], menuX + (menuW - tw) / 2, menuY + (i * bh) + vCenterOffset, scale, true, COL_BLACK);
-            if (i < 4) draw_line_rotated(menuX + 30, menuY + (i + 1) * bh, menuX + menuW - 30, menuY + (i + 1) * bh, COL_LIGHT);
+            if (i < 5) draw_line_rotated(menuX + 30, menuY + (i + 1) * bh, menuX + menuW - 30, menuY + (i + 1) * bh, COL_LIGHT);
         }
         epd_draw_grayscale_image(epd_full_screen(), framebuffer);
         epd_poweroff();
@@ -883,7 +883,7 @@ void handleTouchAction(int x, int y) {
         int menuH = boxBottom - boxTop;
 
         if (x >= menuX && x <= menuX + menuW && y >= menuY && y <= menuY + menuH) {
-            int bh = menuH / 5;
+            int bh = menuH / 6;
             int localY = y - menuY;
             int slot = localY / bh;
             int totalPages = (filteredBooks.size() + SHELF_BOOKS_PER_PAGE - 1) / SHELF_BOOKS_PER_PAGE;
@@ -914,6 +914,11 @@ void handleTouchAction(int x, int y) {
             }
             else if (slot == 3) { // SYNC
                 startGhostDrop();
+                return;
+            }
+            else if (slot == 4) { // PRIVACY
+                appState = STATE_LOCK;
+                drawPinPad(false);
                 return;
             }
             else { // BACK
@@ -1208,7 +1213,7 @@ void loop() {
         goToDeepSleep();
     }
 
-    // Adaptive Auto-Lock Logic (5 Minutes)
+    // Privacy Screen Logic (5 Minutes)
     if ((appState == STATE_LIBRARY || appState == STATE_READING) && (millis() - lastInteraction > 300000)) {
         appState = STATE_LOCK;
         drawPinPad(false);

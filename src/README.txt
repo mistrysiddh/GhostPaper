@@ -19,7 +19,7 @@ GhostPage is a high-performance, minimalist E-Ink operating system designed for 
 ### 🔒 Privacy & Security
 - **Borderless Master Lock**: A sleek, minimalist PIN pad that protects your library.
 - **Mandatory Setup**: Guided custom 6-digit PIN creation on first boot.
-- **Adaptive Auto-Lock**: Automatically secures the device after 5 minutes.
+- **Privacy Screen**: Automatically secures the device after 5 minutes of inactivity.
 
 ### 🔋 Extreme Power Efficiency
 - **Deep Sleep Mode**: Automatically enters zero-power deep sleep after 10 minutes of inactivity.

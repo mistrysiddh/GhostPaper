@@ -5,8 +5,8 @@
 #define DEBUG_ON true
 
 // --- WiFi Settings ---
-#define WIFI_SSID_1 "YOUR_WIFI_SSID"
-#define WIFI_PASS_1 "YOUR_WIFI_PASSWORD"
+#define WIFI_SSID_1 "YOUR_SSID"
+#define WIFI_PASS_1 "YOUR_PASSWORD"
 
 #define WIFI_SSID_2 "OPTIONAL_SSID"
 #define WIFI_PASS_2 "OPTIONAL_PASSWORD"

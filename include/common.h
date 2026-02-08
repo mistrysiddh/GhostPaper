@@ -11,7 +11,7 @@
 #include "config.h"
 
 // --- State ---
-enum AppState { STATE_SPLASH, STATE_LOCK, STATE_SET_PIN, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS, STATE_READER_OPTIONS, STATE_GHOSTDROP };
+enum AppState { STATE_SPLASH, STATE_LOCK, STATE_SET_PIN, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS, STATE_READER_OPTIONS, STATE_LIBRARY_OPTIONS, STATE_GHOSTDROP };
 enum LibFilter { FILTER_ALL, FILTER_NEW, FILTER_READING, FILTER_FINISHED };
 
 extern RTC_DATA_ATTR AppState appState;
@@ -52,6 +52,7 @@ void scanFiles(String path);
 void showTransitionEffect();
 void updateBookCardMenu(int index, bool showMenu);
 void updateReaderMenu(bool showMenu);
+void updateLibraryMenu(bool showMenu);
 void redrawReaderText();
 void forceFullRefresh();
 void showFinishedScreen();

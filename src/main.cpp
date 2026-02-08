@@ -156,8 +156,10 @@ void updateBookCardMenu(int index, bool showMenu) {
     }
 
     if (showMenu) {
-        // --- CLEAN WHITE MINIMALIST MENU (NO BORDERS) ---
+        // --- CLEAN WHITE MINIMALIST MENU WITH BORDER ---
         fill_rect_rotated(x, y, BOOK_W, BOOK_H, COL_WHITE);
+        draw_rect_rotated(x, y, BOOK_W, BOOK_H, COL_BLACK);
+        draw_rect_rotated(x + 1, y + 1, BOOK_W - 2, BOOK_H - 2, COL_BLACK);
 
         int bh = BOOK_H / 4; 
         int vCenterOffset = (bh / 2) + 12; // Adjusted for precise vertical center
@@ -194,6 +196,47 @@ void updateBookCardMenu(int index, bool showMenu) {
     epd_draw_grayscale_image(stripeArea, stripePtr);
     
     epd_poweroff();
+}
+
+void updateLibraryMenu(bool showMenu) {
+    int boxTop = 150;
+    int boxBottom = 750;
+    int boxMargin = 60;
+    int menuX = boxMargin;
+    int menuY = boxTop;
+    int menuW = P_WIDTH - 2 * boxMargin;
+    int menuH = boxBottom - boxTop;
+
+    if (showMenu) {
+        Rect_t menuArea = {
+            .x = (int32_t)(960 - 1 - (menuY + menuH)),
+            .y = (int32_t)menuX,
+            .width = (int32_t)menuH,
+            .height = (int32_t)menuW
+        };
+
+        epd_poweron();
+        for (int i = 0; i < 3; i++) epd_push_pixels(menuArea, 50, 1);
+
+        fill_rect_rotated(menuX, menuY, menuW, menuH, COL_WHITE);
+        draw_rect_rotated(menuX, menuY, menuW, menuH, COL_BLACK);
+        draw_rect_rotated(menuX + 2, menuY + 2, menuW - 4, menuH - 4, COL_BLACK);
+
+        int bh = menuH / 5;
+        int vCenterOffset = (bh / 2) + 15;
+        const char* labels[] = {"NEXT PAGE", "PREV PAGE", "REFRESH", "SYNC", "BACK"};
+        
+        for (int i = 0; i < 5; i++) {
+            float scale = 0.8;
+            int tw = get_text_width_scaled(labels[i], scale);
+            writeln_scaled(labels[i], menuX + (menuW - tw) / 2, menuY + (i * bh) + vCenterOffset, scale, true, COL_BLACK);
+            if (i < 4) draw_line_rotated(menuX + 30, menuY + (i + 1) * bh, menuX + menuW - 30, menuY + (i + 1) * bh, COL_LIGHT);
+        }
+        epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+        epd_poweroff();
+    } else {
+        updateLibrary();
+    }
 }
 
 void redrawReaderText() {
@@ -674,15 +717,15 @@ void handleTouchAction(int x, int y) {
             return;
         }
     }
-            else if (appState == STATE_LIBRARY) {
-                // --- Header Tap -> GhostDrop Sync ---
-                if (y < 90) {
-                    showTransitionEffect();
-                    startGhostDrop();
-                    return;
-                }
-        
-                // --- 1. Tab Bar Touch Detection ---
+    else if (appState == STATE_LIBRARY) {
+        // --- Header Tap -> Library Options Menu ---
+        if (y < 90) {
+            appState = STATE_LIBRARY_OPTIONS;
+            updateLibraryMenu(true);
+            return;
+        }
+
+        // --- 1. Tab Bar Touch Detection ---
         
             if (y > 90 && y < 145) {
                 int tabW = P_WIDTH / 4;
@@ -720,23 +763,27 @@ void handleTouchAction(int x, int y) {
                     }
                 }
                 
-                // Footer Tap for Page Navigation
-                if (y > P_HEIGHT - 115) {
+                // Footer Tap for Page Navigation (Generous touch areas)
+                if (y > P_HEIGHT - 100) {
                     int totalPages = (filteredBooks.size() + SHELF_BOOKS_PER_PAGE - 1) / SHELF_BOOKS_PER_PAGE;
                     
-                    // Left side - Previous page
-                    if (x < P_WIDTH * 0.3 && page > 0) {
-                        librarySelection = max(0, librarySelection - SHELF_BOOKS_PER_PAGE);
-                        updateLibrary();
+                    // Left 40% - Previous page
+                    if (x < P_WIDTH * 0.4) {
+                        if (page > 0) {
+                            librarySelection = max(0, librarySelection - SHELF_BOOKS_PER_PAGE);
+                            updateLibrary();
+                        }
                         return;
                     }
-                    // Right side - Next page
-                    else if (x > P_WIDTH * 0.7 && page < totalPages - 1) {
-                        librarySelection += SHELF_BOOKS_PER_PAGE;
-                        if (librarySelection >= (int)filteredBooks.size()) {
-                            librarySelection = ((int)filteredBooks.size() - 1);
+                    // Right 40% - Next page
+                    else if (x > P_WIDTH * 0.6) {
+                        if (page < totalPages - 1) {
+                            librarySelection += SHELF_BOOKS_PER_PAGE;
+                            if (librarySelection >= (int)filteredBooks.size()) {
+                                librarySelection = ((int)filteredBooks.size() - 1);
+                            }
+                            updateLibrary();
                         }
-                        updateLibrary();
                         return;
                     }
                 }
@@ -823,6 +870,60 @@ void handleTouchAction(int x, int y) {
             redrawBookCover(focusedBookIndex);
             updateBookCardMenu(focusedBookIndex, false);
             focusedBookIndex = -1;
+            return;
+        }
+    }
+    else if (appState == STATE_LIBRARY_OPTIONS) {
+        int boxTop = 150;
+        int boxBottom = 750;
+        int boxMargin = 60;
+        int menuX = boxMargin;
+        int menuY = boxTop;
+        int menuW = P_WIDTH - 2 * boxMargin;
+        int menuH = boxBottom - boxTop;
+
+        if (x >= menuX && x <= menuX + menuW && y >= menuY && y <= menuY + menuH) {
+            int bh = menuH / 5;
+            int localY = y - menuY;
+            int slot = localY / bh;
+            int totalPages = (filteredBooks.size() + SHELF_BOOKS_PER_PAGE - 1) / SHELF_BOOKS_PER_PAGE;
+            int currentPage = librarySelection / SHELF_BOOKS_PER_PAGE;
+
+            if (slot == 0) { // NEXT PAGE
+                if (currentPage < totalPages - 1) {
+                    librarySelection += SHELF_BOOKS_PER_PAGE;
+                    if (librarySelection >= (int)filteredBooks.size()) librarySelection = filteredBooks.size() - 1;
+                }
+                appState = STATE_LIBRARY;
+                updateLibrary();
+                return;
+            }
+            else if (slot == 1) { // PREV PAGE
+                if (currentPage > 0) {
+                    librarySelection = max(0, librarySelection - SHELF_BOOKS_PER_PAGE);
+                }
+                appState = STATE_LIBRARY;
+                updateLibrary();
+                return;
+            }
+            else if (slot == 2) { // REFRESH
+                appState = STATE_LIBRARY;
+                epd_poweron(); epd_clear(); epd_poweroff();
+                updateLibrary();
+                return;
+            }
+            else if (slot == 3) { // SYNC
+                startGhostDrop();
+                return;
+            }
+            else { // BACK
+                appState = STATE_LIBRARY;
+                updateLibraryMenu(false);
+                return;
+            }
+        } else {
+            appState = STATE_LIBRARY;
+            updateLibraryMenu(false);
             return;
         }
     }
@@ -1107,13 +1208,19 @@ void loop() {
         goToDeepSleep();
     }
 
+    // Adaptive Auto-Lock Logic (5 Minutes)
+    if ((appState == STATE_LIBRARY || appState == STATE_READING) && (millis() - lastInteraction > 300000)) {
+        appState = STATE_LOCK;
+        drawPinPad(false);
+    }
+
     if (appState == STATE_GHOSTDROP) {
         server.handleClient();
     }
 
-    // Header sync
+    // Header sync (Reduced to 5 minutes to minimize flashing)
     static unsigned long lastHeaderUpdate = 0;
-    if (appState == STATE_READING && (millis() - lastHeaderUpdate > 60000)) {
+    if (appState == STATE_READING && (millis() - lastHeaderUpdate > 300000)) {
         partialUpdateHeader();
         lastHeaderUpdate = millis();
     }

@@ -22,9 +22,19 @@ venv
 ENV
 __pycache__/
 
+# Sensitive config
+include/config.h
+
 # OS files
 Thumbs.db
 .DS_Store
+*.swp
 
-# Sensitive config (optional: if you want to keep your passwords private)
-# include/config.h
+# Local/Private
+.gemini/
+.pio/
+.venv/
+node_modules/
+dist/
+build/
+bin/

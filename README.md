@@ -51,12 +51,14 @@ Specifically optimized for the **LilyGo T5-47 S3** (4.7-inch E-Paper display).
 - **Hardware Button (IO21)**: Wake from Deep Sleep.
 
 ### Library
-- **Tap Header**: Start **GhostDrop Sync** (WiFi Upload).
+- **Tap Header ("MY LIBRARY")**: Open **Library Menu** (Next Page, Prev Page, Refresh, Sync).
 - **Tab Bar**: Filter by **ALL**, **NEW**, **READING**, or **FINISHED**.
 - **Tap Book**: Open book options (READ, RESET, DELETE, BACK).
+- **Footer Arrows**: Tap "< PREV" or "NEXT >" to scroll through your books.
 
 ### Reader
-- **Tap Text**: Open **Reader Menu** (Font +/-, Refresh, Sync).
+- **Header ("MENU")**: Open **Reader Menu** (Font +/-, Refresh, Sync).
+- **Tap Text**: Also opens the **Reader Menu**.
 - **Tap Bottom Buttons**: Navigation (Back, Prev, Next).
 
 ---

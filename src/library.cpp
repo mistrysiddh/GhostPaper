@@ -179,13 +179,13 @@ void updateLibrary() {
 
     float titleScale = 0.9;
 
-    int hw = get_text_width_scaled(header, titleScale);
+            int hw = get_text_width_scaled(header, titleScale);
 
-    writeln_scaled(header, (P_WIDTH - hw) / 2, 45, titleScale, true, COL_WHITE);
+            writeln_scaled(header, (P_WIDTH - hw) / 2, 45, titleScale, true, COL_WHITE);
 
-    
+            
 
-    float infoScale = 0.4;
+            float infoScale = 0.4;
 
     float batt = getBatteryVoltage();
 
@@ -342,34 +342,34 @@ void updateLibrary() {
 
         
 
+        // --- 3. Footer Navigation ---
         int footerY = P_HEIGHT - 55;
-
         int totalPages = (filteredBooks.size() + SHELF_BOOKS_PER_PAGE - 1) / SHELF_BOOKS_PER_PAGE;
-
         char pgStr[32];
-
         sprintf(pgStr, "Page %d of %d", page + 1, totalPages);
-
+        
+        // Central Page Pill
         int pillW = 160;
-
         int pillH = 40;
-
         int pillX = (P_WIDTH - pillW) / 2;
-
         fill_rect_rotated(pillX, footerY, pillW, pillH, COL_BLACK);
-
         draw_rounded_rect(pillX, footerY, pillW, pillH, 20, COL_DARK);
-
         int tw = get_text_width_scaled(pgStr, 0.55);
-
         writeln_scaled(pgStr, pillX + (pillW - tw)/2, footerY + 27, 0.55, true, COL_WHITE);
 
+        // Visual Navigation Arrows
+        if (page > 0) {
+            const char* prev = "< PREV";
+            writeln_scaled(prev, 30, footerY + 27, 0.5, true, COL_BLACK);
+        }
+        if (page < totalPages - 1) {
+            const char* next = "NEXT >";
+            int nw = get_text_width_scaled(next, 0.5);
+            writeln_scaled(next, P_WIDTH - 30 - nw, footerY + 27, 0.5, true, COL_BLACK);
+        }
     }
-
     epd_draw_grayscale_image(epd_full_screen(), framebuffer);
-
     epd_poweroff();
-
 }
 
 

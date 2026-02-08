@@ -1,4 +1,5 @@
 #include "common.h"
+#include "default_book.h"
 
 // Color palette optimized for e-paper
 #define COVER_ACCENT     COL_DARK
@@ -280,19 +281,54 @@ void updateLibrary() {
 
             
 
-            long savedPos = prefs.getLong(getPrefKey(filteredBooks[idx]).c_str(), 0);
+                                    long savedPos = prefs.getLong(getPrefKey(filteredBooks[idx]).c_str(), 0);
 
-            long totalSize = 1;
+            
 
-            File f = SD.open(filteredBooks[idx]);
+                                    long totalSize = 1;
 
-            if (f) { totalSize = f.size(); f.close(); }
+            
+
+                                    if (filteredBooks[idx].startsWith("internal:")) {
+
+            
+
+                                        totalSize = strlen(DEFAULT_BOOK_TEXT);
+
+            
+
+                                    } else {
+
+            
+
+                                        File f = SD.open(filteredBooks[idx]);
+
+            
+
+                                        if (f) { totalSize = f.size(); f.close(); }
+
+            
+
+                                    }
+
+            
+
+                        
+
+            
+
+            
 
             int pct = (totalSize > 0) ? (savedPos * 100 / totalSize) : 0;
 
             
 
-            drawEnhancedBookCover(x, y, filteredBooks[idx].substring(filteredBooks[idx].lastIndexOf('/')+1), pct, idx);
+            String displayTitle = filteredBooks[idx].substring(filteredBooks[idx].lastIndexOf('/')+1);
+            if (filteredBooks[idx].startsWith("internal:")) {
+                displayTitle = "Echoes of the Code";
+            }
+            
+            drawEnhancedBookCover(x, y, displayTitle, pct, idx);
 
             if (idx == librarySelection) {
 

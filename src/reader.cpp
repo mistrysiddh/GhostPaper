@@ -1,4 +1,5 @@
 #include "common.h"
+#include "default_book.h"
 
 void partialUpdateHeader() {
     if (appState != STATE_READING) return;
@@ -44,19 +45,54 @@ void updateReader(bool partial_refresh) {
         return;
     }
 
-    File f = SD.open(books[currentFileIndex]);
-    if (f) {
+    if (books.empty() || currentFileIndex < 0 || currentFileIndex >= (int)books.size()) {
+        epd_poweroff();
+        return;
+    }
+
+    String path = books[currentFileIndex];
+    bool isInternal = path.startsWith("internal:");
+    String title = "";
+    long totalSize = 0;
+    
+    // OPTIMIZATION: Persistent buffer to avoid heap fragmentation
+    static char buf[5001]; 
+
+    int boxTop = 80;
+    int boxBottom = 820;
+    int boxMargin = 25; 
+    int boxW = P_WIDTH - 2 * boxMargin;
+    int boxH = boxBottom - boxTop;
+
+    // Text rendering coordinates (nested inside the border)
+    int textStartX = boxMargin + 15;
+    int textStartY = boxTop + 45; 
+    int textMaxWidth = P_WIDTH - boxMargin - 15;
+    int textMaxHeight = boxBottom - 15;
+
+    if (isInternal) {
+        title = DEFAULT_BOOK_TITLE;
+        totalSize = strlen(DEFAULT_BOOK_TEXT);
+    } else {
+        File f = SD.open(path);
+        if (f) {
+            title = path.substring(path.lastIndexOf('/') + 1);
+            int dotIdx = title.lastIndexOf('.');
+            if (dotIdx > 0) title = title.substring(0, dotIdx);
+            title.replace("_", " ");
+            totalSize = f.size();
+            f.close();
+        }
+    }
+
+    if (title != "") {
         // --- 1. Header (Clean & Modern) ---
         int headerH = 70;
         draw_line_rotated(30, headerH, P_WIDTH - 30, headerH, black);
 
-        // Title
-        String title = books[currentFileIndex].substring(books[currentFileIndex].lastIndexOf('/') + 1);
-        int dotIdx = title.lastIndexOf('.');
-        if (dotIdx > 0) title = title.substring(0, dotIdx);
-        title.replace("_", " ");
-        if (title.length() > 25) title = title.substring(0, 22) + "...";
-        writeln_scaled(title.c_str(), 35, 40, 0.5, true, black);
+        String displayTitle = title;
+        if (displayTitle.length() > 25) displayTitle = displayTitle.substring(0, 22) + "...";
+        writeln_scaled(displayTitle.c_str(), 35, 40, 0.5, true, black);
 
         // Battery Voltage
         float batt = getBatteryVoltage();
@@ -64,15 +100,7 @@ void updateReader(bool partial_refresh) {
         int battW = get_text_width_scaled(battStr, 0.5);
         writeln_scaled(battStr, P_WIDTH - 35 - battW, 40, 0.5, true, black);
 
-        // --- 2. Main Text Area (Clean Thin Border Style) ---
-        int boxTop = 80;
-        int boxBottom = 820;
-        int boxMargin = 25; // Increased from 15 to add 10px margin
-        int boxW = P_WIDTH - 2 * boxMargin;
-        int boxH = boxBottom - boxTop;
-
-        // --- PHYSICAL WASH (Library Style) ---
-        // Prevents ghosting of the previous page
+        // --- 2. Main Text Area ---
         if (partial_refresh) {
             Rect_t textCardArea = {
                 .x = (int32_t)(960 - 1 - (boxTop + boxH)),
@@ -85,45 +113,45 @@ void updateReader(bool partial_refresh) {
             }
         }
 
-        // Main Background (White card)
         fill_rect_rotated(boxMargin, boxTop, boxW, boxH, COL_WHITE);
-
-        // Single Thin Border
         draw_rect_rotated(boxMargin, boxTop, boxW, boxH, black);
 
-        // Text rendering coordinates (nested inside the border)
-        int textStartX = boxMargin + 15;
-        int textStartY = boxTop + 45; 
-        int textMaxWidth = P_WIDTH - boxMargin - 15;
-        int textMaxHeight = boxBottom - 15; 
+        // --- RENDER TEXT CONTENT ---
+        if (isInternal) {
+            if (textPos >= totalSize) textPos = 0;
+            int toRead = min((long)sizeof(buf) - 1, totalSize - textPos);
+            if (toRead > 0) {
+                memcpy(buf, DEFAULT_BOOK_TEXT + textPos, toRead);
+                buf[toRead] = '\0';
+                lastPageByteCount = renderPage(buf, textStartX, textStartY, textMaxWidth, textMaxHeight);
+            } else {
+                lastPageByteCount = 0;
+            }
+        } else {
+            File f = SD.open(path);
+            if (f) {
+                f.seek(textPos);
+                int r = f.readBytes(buf, sizeof(buf) - 1); 
+                buf[r] = '\0';
+                lastPageByteCount = renderPage(buf, textStartX, textStartY, textMaxWidth, textMaxHeight);
+                f.close();
+            }
+        }
 
-        f.seek(textPos);
-        
-        // OPTIMIZATION: Persistent buffer to avoid heap fragmentation
-        static char buf[5001]; 
-        
-        int r = f.readBytes(buf, sizeof(buf) - 1); 
-        buf[r] = '\0';
-        lastPageByteCount = renderPage(buf, textStartX, textStartY, textMaxWidth, textMaxHeight); 
-
-        // --- 3. Footer (Visual Progress & Controls) ---
+        // --- 3. Footer ---
         int footerY = P_HEIGHT - 115;
         draw_line_rotated(30, footerY - 15, P_WIDTH - 30, footerY - 15, black);
 
-        long totalSize = f.size();
         int progress = (totalSize > 0) ? (textPos * 100 / totalSize) : 0;
         
-        // Time (Left)
         String timeS = getTimeString();
         writeln_scaled(timeS.c_str(), 35, footerY + 10, 0.45, false, gray);
 
-        // Progress Text (Right)
         char progStr[32]; 
         sprintf(progStr, "%d%% completed", progress);
         int progW = get_text_width_scaled(progStr, 0.45);
         writeln_scaled(progStr, P_WIDTH - 35 - progW, footerY + 10, 0.45, false, gray);
 
-        // Visual Progress Bar
         int barX = 35;
         int barY = footerY + 25;
         int barW = P_WIDTH - 70;
@@ -132,7 +160,7 @@ void updateReader(bool partial_refresh) {
             fill_rect_rotated(barX, barY, (int)(barW * (progress / 100.0)), 4, black);
         }
 
-        // Navigation Buttons (Clean Style)
+        // Navigation Buttons
         int btnY = BTN_Y_POS;
         int mbx = (P_WIDTH - (3 * BUTTON_W + 2 * BUTTON_GAP)) / 2;
 
@@ -144,8 +172,7 @@ void updateReader(bool partial_refresh) {
             writeln_scaled(btnLabels[i], bx + (BUTTON_W - tw) / 2, btnY + 33, 0.45, true, black);
         }
 
-        prefs.putLong(getPrefKey(books[currentFileIndex]).c_str(), textPos); 
-        f.close();
+        prefs.putLong(getPrefKey(path).c_str(), textPos); 
     }
     
     if (partial_refresh) {

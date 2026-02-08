@@ -1,4 +1,5 @@
 #include "common.h"
+#include "default_book.h"
 #include <WiFi.h>
 #include <Button2.h>
 #include <math.h> 
@@ -106,8 +107,12 @@ void redrawBookCover(int index) {
 
     long savedPos = prefs.getLong(getPrefKey(books[index]).c_str(), 0);
     long totalSize = 1;
-    File f = SD.open(books[index]);
-    if (f) { totalSize = f.size(); f.close(); }
+    if (books[index].startsWith("internal:")) {
+        totalSize = strlen(DEFAULT_BOOK_TEXT);
+    } else {
+        File f = SD.open(books[index]);
+        if (f) { totalSize = f.size(); f.close(); }
+    }
     int pct = (totalSize > 0) ? (savedPos * 100 / totalSize) : 0;
     
     // Draw the cover into the framebuffer memory
@@ -170,8 +175,13 @@ void updateBookCardMenu(int index, bool showMenu) {
 
         // Slot 3: DELETE
         const char* tDel = "DELETE";
+        uint8_t delCol = COL_BLACK;
+        if (filteredBooks[index].startsWith("internal:")) {
+            tDel = "SYSTEM";
+            delCol = COL_GRAY;
+        }
         int wDel = get_text_width_scaled(tDel, optScale);
-        writeln_scaled(tDel, x + (BOOK_W - wDel) / 2, y + 2 * bh + vCenterOffset, optScale, true, COL_BLACK);
+        writeln_scaled(tDel, x + (BOOK_W - wDel) / 2, y + 2 * bh + vCenterOffset, optScale, true, delCol);
         
         // Slot 4: BACK
         const char* tBack = "BACK";
@@ -269,18 +279,18 @@ void drawPinPad(bool settingNew) {
     // 3. PIN Dots Section
     int dotRadius = 12;
     int dotGap = 45;
-    int dotTotalW = (4 * 2 * dotRadius) + (3 * dotGap);
+    int dotTotalW = (6 * 2 * dotRadius) + (5 * dotGap);
     int dotStartX = cardX + (cardW - dotTotalW) / 2 + dotRadius;
     int dotY = cardY + 160;
     
     // Instructions for setup (without line)
     if (settingNew) {
-        const char* sub = "Create a 4-digit PIN";
+        const char* sub = "Create a 6-digit PIN";
         int sw = get_text_width_scaled(sub, 0.45);
         writeln_scaled(sub, cardX + (cardW - sw) / 2, dotY + 65, 0.45, false, COL_BLACK);
     }
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 6; i++) {
         int dx = dotStartX + i * (2 * dotRadius + dotGap);
         if (i < (int)enteredPin.length()) {
             for (int r = 0; r < dotRadius; r++) draw_circle_rotated(dx, dotY, r, COL_BLACK);
@@ -382,7 +392,7 @@ void handlePinTouch(int x, int y) {
     if (val == "CLR") enteredPin = "";
     else if (val == "OK") {
         if (appState == STATE_SET_PIN) {
-            if (enteredPin.length() == 4) {
+            if (enteredPin.length() == 6) {
                 prefs.putString("saved_pin", enteredPin);
                 activePin = enteredPin;
                 enteredPin = "";
@@ -403,7 +413,7 @@ void handlePinTouch(int x, int y) {
             }
         }
     } else {
-        if (enteredPin.length() < 4) enteredPin += val;
+        if (enteredPin.length() < 6) enteredPin += val;
     }
 
     drawPinPad(appState == STATE_SET_PIN);
@@ -546,6 +556,7 @@ void stopGhostDrop() {
 
     // Refresh the books list to include new uploads
     books.clear();
+    books.push_back("internal:Echoes_of_the_Code.txt");
     scanFiles("/");
 
     showTransitionEffect();
@@ -768,6 +779,14 @@ void handleTouchAction(int x, int y) {
                 }
                 else if (slot == 2) { // DELETE
                     String path = filteredBooks[focusedBookIndex];
+                    if (path.startsWith("internal:")) {
+                        // Cannot delete internal books
+                        appState = STATE_LIBRARY;
+                        redrawBookCover(focusedBookIndex);
+                        updateBookCardMenu(focusedBookIndex, false);
+                        focusedBookIndex = -1;
+                        return;
+                    }
                     if (SD.exists(path)) {
                         SD.remove(path);
                         String key = getPrefKey(path);
@@ -856,8 +875,12 @@ void applyLibraryFilter() {
 
         long savedPos = prefs.getLong(getPrefKey(path).c_str(), 0);
         long totalSize = 1;
-        File f = SD.open(path);
-        if (f) { totalSize = f.size(); f.close(); }
+        if (path.startsWith("internal:")) {
+            totalSize = strlen(DEFAULT_BOOK_TEXT);
+        } else {
+            File f = SD.open(path);
+            if (f) { totalSize = f.size(); f.close(); }
+        }
 
         if (libraryFilter == FILTER_NEW) {
             if (savedPos == 0) filteredBooks.push_back(path);
@@ -869,6 +892,45 @@ void applyLibraryFilter() {
     }
 }
 
+void showFinishedScreen() {
+    epd_poweron();
+    memset(framebuffer, COL_WHITE, L_WIDTH * L_HEIGHT / 2);
+    
+    int cardW = 500;
+    int cardH = 340;
+    int cardX = (P_WIDTH - cardW) / 2;
+    int cardY = (P_HEIGHT - cardH) / 2;
+    
+    // Minimalist Card
+    draw_rounded_rect(cardX, cardY, cardW, cardH, 20, COL_BLACK);
+    fill_rect_rotated(cardX + 20, cardY + 20, cardW - 40, 80, COL_BLACK);
+    
+    const char* t = "BOOK FINISHED";
+    int tw = get_text_width_scaled(t, 0.85);
+    writeln_scaled(t, cardX + (cardW - tw)/2, cardY + 75, 0.85, true, COL_WHITE);
+    
+    const char* m1 = "You've reached the final page.";
+    int mw1 = get_text_width_scaled(m1, 0.55);
+    writeln_scaled(m1, cardX + (cardW - mw1)/2, cardY + 160, 0.55, true, COL_BLACK);
+
+    const char* m2 = "Well read.";
+    int mw2 = get_text_width_scaled(m2, 0.55);
+    writeln_scaled(m2, cardX + (cardW - mw2)/2, cardY + 205, 0.55, false, COL_BLACK);
+    
+    const char* b = "Returning to Library...";
+    int bw = get_text_width_scaled(b, 0.45);
+    writeln_scaled(b, cardX + (cardW - bw)/2, cardY + 280, 0.45, false, COL_GRAY);
+    
+    epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+    epd_poweroff();
+    
+    delay(3000);
+    
+    showTransitionEffect();
+    appState = STATE_LIBRARY;
+    updateLibrary();
+}
+
 void handleNext() {
     if (appState == STATE_LIBRARY) { 
         if (!books.empty()) { 
@@ -878,11 +940,22 @@ void handleNext() {
         } 
     }
     else if (appState == STATE_READING) {
-        if (lastPageByteCount > 0) {
+        if (currentFileIndex < 0 || currentFileIndex >= (int)books.size()) return;
+
+        long totalSize = 0;
+        String path = books[currentFileIndex];
+        if (path.startsWith("internal:")) {
+            totalSize = strlen(DEFAULT_BOOK_TEXT);
+        } else {
+            File f = SD.open(path);
+            if (f) { totalSize = f.size(); f.close(); }
+        }
+
+        if (textPos + lastPageByteCount >= totalSize) {
+            showFinishedScreen();
+        } else {
             pageHistory.push_back(textPos);
             textPos += lastPageByteCount;
-            updateReader(true);
-        } else {
             updateReader(true);
         }
     }
@@ -973,10 +1046,12 @@ void setup() {
     prefs.begin("vellum", false); 
     fontScale = prefs.getFloat("fscale", 1.0);
     
+    books.clear();
+    books.push_back("internal:Echoes_of_the_Code.txt");
+
     SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS); 
     if (SD.begin(SD_CS, SPI)) {
         Serial.println(F("DEBUG: SD Card mounted successfully. Scanning files..."));
-        books.clear();
         scanFiles("/");
         Serial.printf("DEBUG: Found %d books\n", (int)books.size());
     } else {

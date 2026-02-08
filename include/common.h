@@ -54,6 +54,7 @@ void updateBookCardMenu(int index, bool showMenu);
 void updateReaderMenu(bool showMenu);
 void redrawReaderText();
 void forceFullRefresh();
+void showFinishedScreen();
 void updateBookCardMenu(int index, bool showMenu);
 void drawPinPad(bool settingNew = false);
 void handlePinTouch(int x, int y);

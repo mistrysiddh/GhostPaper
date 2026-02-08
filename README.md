@@ -11,13 +11,14 @@ GhostPage is a high-performance, minimalist E-Ink operating system designed for 
 ### 📚 Premium Reading Experience
 - **Bookshelf UI**: A clean, grid-based library with "Enhanced Card" styling.
 - **Smart Organization**: Automatic folders for **NEW**, **READING**, and **FINISHED** books.
+- **System Books**: Pre-loaded, undeletable core library content (e.g., *Echoes of the Code*).
 - **GhostDrop (Wireless Sync)**: WiFi-powered book uploads via a simple web interface and QR code.
 - **Ultra-Fast Engine**: Optimized `.txt` rendering with customizable font scaling.
 - **Anti-Ghosting**: Innovative "Physical Wash" technology for secure, trace-free page turns and menu transitions.
 
 ### 🔒 Privacy & Security
 - **Borderless Master Lock**: A sleek, minimalist PIN pad that protects your library.
-- **Mandatory Setup**: Guided custom 4-digit PIN creation on first boot.
+- **Mandatory Setup**: Guided custom 6-digit PIN creation on first boot.
 - **Adaptive Auto-Lock**: Automatically secures the device after 5 minutes.
 
 ### 🔋 Extreme Power Efficiency
@@ -41,7 +42,7 @@ Specifically optimized for the **LilyGo T5-47 S3** (4.7-inch E-Paper display).
    - Open this folder in VS Code.
    - Connect your LilyGo via USB-C.
    - Click the **PlatformIO Upload** arrow (→).
-4. **First Boot**: Follow the on-screen prompt to set your generic 4-digit PIN.
+4. **First Boot**: Follow the on-screen prompt to set your generic 6-digit PIN.
 
 ## 🎮 Controls
 

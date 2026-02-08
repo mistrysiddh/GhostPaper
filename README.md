@@ -6,6 +6,14 @@ GhostPage is a high-performance, minimalist E-Ink operating system designed for 
 ![Platform](https://img.shields.io/badge/Platform-ESP32--S3-orange?style=for-the-badge)
 ![Display](https://img.shields.io/badge/Display-EPD--4.7--Inch-green?style=for-the-badge)
 
+## 📸 Demo Gallery
+
+| | | |
+|:---:|:---:|:---:|
+| ![Step 1](images/01.heic) | ![Step 2](images/02.heic) | ![Step 3](images/03.heic) |
+| ![Step 4](images/04.heic) | ![Step 5](images/05.heic) | ![Step 6](images/06.heic) |
+| ![Step 7](images/07.heic) | | |
+
 ## ✨ Features
 
 ### 📚 Premium Reading Experience

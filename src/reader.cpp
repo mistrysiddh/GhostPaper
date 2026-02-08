@@ -45,11 +45,6 @@ void updateReader(bool partial_refresh) {
         return;
     }
 
-    if (books.empty() || currentFileIndex < 0 || currentFileIndex >= (int)books.size()) {
-        epd_poweroff();
-        return;
-    }
-
     String path = books[currentFileIndex];
     bool isInternal = path.startsWith("internal:");
     String title = "";

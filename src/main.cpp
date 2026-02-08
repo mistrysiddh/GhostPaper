@@ -26,7 +26,6 @@ uint8_t *framebuffer = NULL;
 std::vector<String> books;
 std::vector<String> filteredBooks;
 Preferences prefs;
-Button2 smartBtn;
 TouchDrvGT911 touch;
 std::vector<long> pageHistory;
 unsigned long lastInteraction = 0;
@@ -1056,52 +1055,6 @@ void handleNext() {
             updateReader(true);
         }
     }
-}
-
-void showEnhancedSplash() {
-    epd_poweron(); 
-    epd_clear(); 
-    memset(framebuffer, COL_BLACK, L_WIDTH * L_HEIGHT / 2);
-    
-    int startY = 60;
-    int lineH = 30;
-    float fs = 0.45;
-
-    // Penguin ASCII (Simple)
-    writeln_scaled("    .--.", 40, startY, fs, true, COL_WHITE);
-    writeln_scaled("   |o_o |", 40, startY + 25, fs, true, COL_WHITE);
-    writeln_scaled("   |:_/ |", 40, startY + 50, fs, true, COL_WHITE);
-    writeln_scaled("  //   \\ \\", 40, startY + 75, fs, true, COL_WHITE);
-    writeln_scaled(" (|     | )", 40, startY + 100, fs, true, COL_WHITE);
-    writeln_scaled("/'\\_   _/`\\", 40, startY + 125, fs, true, COL_WHITE);
-    writeln_scaled("\\___)=(___/", 40, startY + 150, fs, true, COL_WHITE);
-
-    const char* logs[] = {
-        "[    0.000000] GhostPage Kernel 1.0.0-gp-esp32s3",
-        "[    0.000000] CPU: ESP32-S3 (revision v0.2) 240MHz",
-        "[    0.042183] mem: PSRAM detected, initializing allocator",
-        "[    0.152910] vfs: Mounting SD card (FAT32) ... [ OK ]",
-        "[    0.284102] input: GT911 Capacitive Touch Driver active",
-        "[    0.410293] display: LilyGo EPD 4.7-Inch initialized",
-        "[    0.592811] rtc: PCF8563 external clock synchronized",
-        "[    0.712003] ghost: Loading user preferences (vellum)",
-        "[    0.854192] ghost: Checking partitions ... [ OK ]",
-        "[    1.102938] ghost: Starting bookshelf-daemon",
-        "[    1.254102] ghost: Security subsystem active",
-        "",
-        "GhostPage Login: ghostpage (automatic login)",
-        "Password: * * * *",
-        "Last login: Sun Feb 08 2026 on tty1"
-    };
-
-    for (int i = 0; i < 15; i++) {
-        writeln_scaled(logs[i], 180, startY + (i * lineH), fs, false, COL_WHITE);
-        // Partial push for each log to simulate terminal scrolling
-        epd_draw_grayscale_image(epd_full_screen(), framebuffer);
-        delay(80);
-    }
-
-    epd_poweroff();
 }
 
 void setup() {

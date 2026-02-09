@@ -19,7 +19,7 @@ echo --- 2. Locating esptool ---
 
 :: Try to find esptool in the PlatformIO packages
 set "ESPTOOL_PATH="
-for /d %%i in ("%USERPROFILE%\.platformio\packages	ool-esptoolpy*") do (
+for /d %%i in ("%USERPROFILE%\.platformio\packages\tool-esptoolpy*") do (
     if exist "%%i\esptool.py" (
         set "ESPTOOL_PATH=%%i\esptool.py"
         goto :found_esptool

@@ -1,5 +1,6 @@
 #include "common.h"
 #include "default_book.h"
+#include "store.h"
 #include <WiFi.h>
 #include <Button2.h>
 #include <math.h> 
@@ -21,6 +22,7 @@ RTC_DATA_ATTR long textPos = 0;
 RTC_DATA_ATTR float fontScale = 1.15;
 RTC_DATA_ATTR long lastPageByteCount = 0;
 RTC_DATA_ATTR int focusedBookIndex = -1;
+RTC_DATA_ATTR bool useSerif = false;
 
 uint8_t *framebuffer = NULL;
 std::vector<String> books;
@@ -276,17 +278,17 @@ void updateReaderMenu(bool showMenu) {
         draw_rounded_rect(menuX, menuY, menuW, menuH, 8, COL_BLACK);
         draw_rounded_rect(menuX + 2, menuY + 2, menuW - 4, menuH - 4, 7, COL_BLACK);
 
-        int bh = menuH / 5;
+        int bh = menuH / 6;
         int vCenterOffset = (bh / 2) + 15;
 
-        const char* labels[] = {"FONT +", "FONT -", "REFRESH", "SYNC", "BACK"};
-        for (int i = 0; i < 5; i++) {
+        const char* labels[] = {"FONT +", "FONT -", useSerif ? "SERIF ON" : "SANS SERIF", "REFRESH", "SYNC", "BACK"};
+        for (int i = 0; i < 6; i++) {
             float scale = 1.0; // Larger text for larger menu
             int tw = get_text_width_scaled(labels[i], scale);
             writeln_scaled(labels[i], menuX + (menuW - tw) / 2, menuY + (i * bh) + vCenterOffset, scale, true, COL_BLACK);
             
             // Decorative separators
-            if (i < 4) {
+            if (i < 5) {
                 draw_line_rotated(menuX + 40, menuY + (i + 1) * bh, menuX + menuW - 40, menuY + (i + 1) * bh, COL_LIGHT);
             }
         }
@@ -626,6 +628,10 @@ void handleTouchAction(int x, int y) {
         handleGhostDropTouch(x, y);
         return;
     }
+    if (appState == STATE_STORE) {
+        handleStoreTouch(x, y);
+        return;
+    }
     if (appState == STATE_PRIVACY || appState == STATE_SET_PIN) {
         handlePinTouch(x, y);
         return;
@@ -677,7 +683,7 @@ void handleTouchAction(int x, int y) {
         int menuH = boxBottom - boxTop;
 
         if (x >= menuX && x <= menuX + menuW && y >= menuY && y <= menuY + menuH) {
-            int bh = menuH / 5;
+            int bh = menuH / 6;
             int localY = y - menuY;
             int slot = localY / bh;
 
@@ -697,12 +703,19 @@ void handleTouchAction(int x, int y) {
                 updateReader(false);
                 return;
             }
-            else if (slot == 2) { // REFRESH
+            else if (slot == 2) { // TYPOGRAPHY TOGGLE
+                useSerif = !useSerif;
+                prefs.putBool("serif", useSerif);
+                appState = STATE_READING;
+                updateReader(false); // Triggers redraw with new font
+                return;
+            }
+            else if (slot == 3) { // REFRESH
                 appState = STATE_READING;
                 forceFullRefresh();
                 return;
             }
-            else if (slot == 3) { // SYNC
+            else if (slot == 4) { // SYNC
                 startGhostDrop();
                 return;
             }
@@ -729,8 +742,18 @@ void handleTouchAction(int x, int y) {
         // --- 1. Tab Bar Touch Detection ---
         
             if (y > 90 && y < 145) {
-                int tabW = P_WIDTH / 4;
+                int tabW = P_WIDTH / 5; // 5 tabs now
                 int newFilter = x / tabW;
+                if (newFilter == 4) { // STORE tab
+                    appState = STATE_STORE;
+                    showTransitionEffect();
+                    updateStore();
+                    if (storeCatalog.empty()) { // Trigger sync if store is empty
+                         syncStore();
+                         updateStore();
+                    }
+                    return;
+                }
                 if (newFilter >= 0 && newFilter < 4) {
                     libraryFilter = (LibFilter)newFilter;
                     librarySelection = 0; // Reset scroll/selection
@@ -1097,6 +1120,7 @@ void setup() {
     
     prefs.begin("vellum", false); 
     fontScale = prefs.getFloat("fscale", 1.0);
+    useSerif = prefs.getBool("serif", false);
     
     books.clear();
     books.push_back("internal:Echoes_of_the_Code.txt");
@@ -1143,6 +1167,8 @@ void setup() {
         updateLibrary();
     } else if (appState == STATE_READING) {
         updateReader(false);
+    } else if (appState == STATE_STORE) {
+        updateStore();
     }
     
     lastInteraction = millis();

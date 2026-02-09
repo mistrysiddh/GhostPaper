@@ -11,8 +11,8 @@
 #include "config.h"
 
 // --- State ---
-enum AppState { STATE_SPLASH, STATE_PRIVACY, STATE_SET_PIN, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS, STATE_READER_OPTIONS, STATE_LIBRARY_OPTIONS, STATE_GHOSTDROP };
-enum LibFilter { FILTER_ALL, FILTER_NEW, FILTER_READING, FILTER_FINISHED };
+enum AppState { STATE_SPLASH, STATE_PRIVACY, STATE_SET_PIN, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS, STATE_READER_OPTIONS, STATE_LIBRARY_OPTIONS, STATE_GHOSTDROP, STATE_STORE };
+enum LibFilter { FILTER_ALL, FILTER_NEW, FILTER_READING, FILTER_FINISHED, FILTER_STORE };
 
 extern RTC_DATA_ATTR AppState appState;
 extern RTC_DATA_ATTR LibFilter libraryFilter;
@@ -22,6 +22,7 @@ extern RTC_DATA_ATTR long textPos;
 extern RTC_DATA_ATTR float fontScale;
 extern RTC_DATA_ATTR long lastPageByteCount;
 extern RTC_DATA_ATTR int focusedBookIndex;
+extern RTC_DATA_ATTR bool useSerif;
 
 // --- Shared Objects ---
 extern uint8_t *framebuffer;

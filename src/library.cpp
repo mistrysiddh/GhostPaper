@@ -240,19 +240,19 @@ void updateLibrary() {
 
     
 
-    // --- 2. Filter Tabs (ALL | NEW | READING | FINISHED) ---
+    // --- 2. Filter Tabs (ALL | NEW | READING | FINISHED | STORE) ---
 
     int tabY = 125;
 
-    const char* tabs[] = {"ALL", "NEW", "READING", "FINISHED"};
+    const char* tabs[] = {"ALL", "NEW", "READING", "FINISHED", "STORE"};
 
-    int tabW = P_WIDTH / 4;
+    int tabW = P_WIDTH / 5; // 5 tabs
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
 
         int tx = i * tabW;
 
-        if (libraryFilter == i) {
+        if (i < 4 && libraryFilter == i) {
 
             fill_rect_rotated(tx + 5, tabY - 25, tabW - 10, 40, COL_BLACK);
 
@@ -260,6 +260,11 @@ void updateLibrary() {
 
             writeln_scaled(tabs[i], tx + (tabW - tw) / 2, tabY, 0.4, true, COL_WHITE);
 
+        } else if (i == 4) {
+             // Store Tab Special Styling
+             draw_rounded_rect(tx + 5, tabY - 25, tabW - 10, 40, 5, COL_BLACK);
+             int tw = get_text_width_scaled(tabs[i], 0.4);
+             writeln_scaled(tabs[i], tx + (tabW - tw) / 2, tabY, 0.4, true, COL_BLACK);
         } else {
 
             draw_rounded_rect(tx + 5, tabY - 25, tabW - 10, 40, 5, COL_BLACK);

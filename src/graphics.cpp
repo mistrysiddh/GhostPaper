@@ -1,5 +1,6 @@
 #include "common.h"
 #include "firasans.h"
+#include "crimson.h"
 #include "zlib/zlib.h"
 
 // --- Helper for Circle Section ---
@@ -100,7 +101,8 @@ uint32_t decode_utf8(const char** s) {
 }
 
 int drawChar(uint32_t cp, int x, int y, float scale, bool bold, uint8_t color) {
-    GFXfont *font = (GFXfont *)&FiraSans; GFXglyph *glyph; get_glyph(font, cp, &glyph);
+    GFXfont *font = useSerif ? (GFXfont *)&Crimson : (GFXfont *)&FiraSans; 
+    GFXglyph *glyph; get_glyph(font, cp, &glyph);
     if (!glyph) return (cp == ' ') ? (int)(12 * scale) : 0;
     uint32_t offset = glyph->data_offset; int32_t bw = (glyph->width + 1) / 2;
     unsigned long bsize = bw * glyph->height; uint8_t *bitmap = (uint8_t *)malloc(bsize);
@@ -123,9 +125,10 @@ int drawChar(uint32_t cp, int x, int y, float scale, bool bold, uint8_t color) {
 
 int get_text_width_scaled(const char* string, float scale) {
     int totalWidth = 0; const char* p = string;
+    GFXfont *font = useSerif ? (GFXfont *)&Crimson : (GFXfont *)&FiraSans;
     while (*p) {
         uint32_t cp = decode_utf8(&p);
-        GFXglyph *glyph; get_glyph((GFXfont *)&FiraSans, cp, &glyph);
+        GFXglyph *glyph; get_glyph(font, cp, &glyph);
         if (glyph) totalWidth += (int)(glyph->advance_x * scale); 
         else if (cp == ' ') totalWidth += (int)(12 * scale);
     }

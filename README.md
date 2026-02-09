@@ -22,7 +22,6 @@ GhostPage is a high-performance, minimalist E-Ink operating system designed for 
 - **GhostDrop (Wireless Sync)**: WiFi-powered book uploads via a simple web interface and QR code.
 - **Ultra-Fast Engine**: Highly optimized `.txt` rendering with custom font scaling and zero-latency page turns.
 - **Performance-First Core**: Scrubbed codebase with minimized memory footprint and efficient power-state management.
-- **Dynamic UI**: Real-time partial refreshes (every 1 min) for battery, clock, and progress bar with zero flicker.
 - **Anti-Ghosting**: Innovative "Physical Wash" technology for secure, trace-free transitions.
 
 ### 🔒 Privacy & Security

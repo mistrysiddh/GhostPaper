@@ -1180,10 +1180,10 @@ void loop() {
         server.handleClient();
     }
 
-    // Dynamic UI sync (Every 1 minute for accurate clock and status)
+    // Dynamic UI sync (Every 1 minute for accurate clock)
     static unsigned long lastHeaderUpdate = 0;
-    if ((appState == STATE_READING || appState == STATE_LIBRARY) && (millis() - lastHeaderUpdate > 60000)) {
-        if (appState == STATE_READING) partialUpdateHeader();
+    if (millis() - lastHeaderUpdate > 60000) {
+        if (appState == STATE_READING) partialUpdateReaderTime();
         else if (appState == STATE_LIBRARY) partialUpdateLibraryHeader();
         lastHeaderUpdate = millis();
     }

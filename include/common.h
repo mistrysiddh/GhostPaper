@@ -40,6 +40,7 @@ void applyLibraryFilter();
 void drawEnhancedBookCover(int x, int y, String title, int progress, int bookIndex);
 void updateReader(bool partial_refresh = false);
 void partialUpdateHeader();
+void partialUpdateReaderTime();
 long renderPage(const char* text, int startX, int startY, int maxWidth, int maxHeight);
 void openBook();
 void handleNext();

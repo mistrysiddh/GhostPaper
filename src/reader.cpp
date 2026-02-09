@@ -88,6 +88,38 @@ void partialUpdateHeader() {
     epd_poweroff();
 }
 
+void partialUpdateReaderTime() {
+    if (appState != STATE_READING) return;
+    
+    int footerY = P_HEIGHT - 115;
+    int tcW = 100, tcH = 40;
+    int tcX = 30, tcY = footerY - 5;
+
+    // Physical Mapping: Portrait (540x960) -> Physical (960x540)
+    // Physical X = 960 - 1 - (Portrait Y + Portrait H)
+    // Physical Y = Portrait X
+    Rect_t timeArea = {
+        .x = (int32_t)(960 - 1 - (tcY + tcH)),
+        .y = (int32_t)tcX,
+        .width = (uint32_t)tcH,
+        .height = (uint32_t)tcW
+    };
+
+    epd_poweron();
+    uint8_t black = COL_BLACK, gray = COL_GRAY;
+
+    // Redraw the card and time into the framebuffer
+    fill_rect_rotated(tcX, tcY, tcW, tcH, COL_BG);
+    draw_rounded_rect(tcX, tcY, tcW, tcH, 8, gray);
+    
+    String timeS = getTimeString();
+    int tw = get_text_width_scaled(timeS.c_str(), 0.45);
+    writeln_scaled(timeS.c_str(), tcX + (tcW - tw) / 2, tcY + 28, 0.45, true, black);
+
+    epd_draw_grayscale_image(timeArea, framebuffer);
+    epd_poweroff();
+}
+
 void updateReader(bool partial_refresh) {
     if (DEBUG_ON) Serial.printf("[UI] Rendering Reader Page... Partial: %s\n", partial_refresh ? "YES" : "NO");
     epd_poweron();
@@ -205,8 +237,14 @@ void updateReader(bool partial_refresh) {
 
         int progress = (totalSize > 0) ? (textPos * 100 / totalSize) : 0;
         
+        // Time Card (In-Card Style)
+        int tcW = 100, tcH = 40;
+        int tcX = 30, tcY = footerY - 5;
+        draw_rounded_rect(tcX, tcY, tcW, tcH, 8, gray);
+        
         String timeS = getTimeString();
-        writeln_scaled(timeS.c_str(), 35, footerY + 10, 0.45, false, gray);
+        int tw = get_text_width_scaled(timeS.c_str(), 0.45);
+        writeln_scaled(timeS.c_str(), tcX + (tcW - tw) / 2, tcY + 28, 0.45, true, black);
 
         char progStr[32]; 
         sprintf(progStr, "%d%% completed", progress);

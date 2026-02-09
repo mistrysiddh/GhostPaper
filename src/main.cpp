@@ -1180,14 +1180,6 @@ void loop() {
         server.handleClient();
     }
 
-    // Dynamic UI sync (Every 1 minute for accurate clock)
-    static unsigned long lastHeaderUpdate = 0;
-    if (millis() - lastHeaderUpdate > 60000) {
-        if (appState == STATE_READING) partialUpdateReaderTime();
-        else if (appState == STATE_LIBRARY) partialUpdateLibraryHeader();
-        lastHeaderUpdate = millis();
-    }
-
     // Direct Touch using TouchDrvGT911
     if (touchEnabled && (millis() > lastTouchTime + TOUCH_COOLDOWN)) {
         int16_t tx[5], ty[5];

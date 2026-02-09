@@ -4,27 +4,87 @@
 void partialUpdateHeader() {
     if (appState != STATE_READING) return;
     
-    // Define the header area to update in PHYSICAL landscape coordinates
-    Rect_t area = {
-        .x = 0,
+    // 1. Refresh Header Area (Top 70px)
+    Rect_t headerArea = {
+        .x = (int32_t)(960 - 1 - 70),
         .y = 0,
-        .width = (uint32_t)L_WIDTH,
-        .height = 70
+        .width = 70,
+        .height = (uint32_t)P_WIDTH
     };
 
     epd_poweron();
-    
-    uint8_t black = COL_BLACK;
+    uint8_t black = COL_BLACK, gray = COL_GRAY;
 
-    // Redraw Battery Voltage into the framebuffer
+    // Redraw Header Background/Base in framebuffer
+    fill_rect_rotated(0, 0, P_WIDTH, 70, COL_BG);
+    draw_line_rotated(30, 70, P_WIDTH - 30, 70, black);
+
+    // Title
+    String path = books[currentFileIndex];
+    String title = path.substring(path.lastIndexOf('/') + 1);
+    int dotIdx = title.lastIndexOf('.');
+    if (dotIdx > 0) title = title.substring(0, dotIdx);
+    title.replace("_", " ");
+    if (title.length() > 25) title = title.substring(0, 22) + "...";
+    writeln_scaled(title.c_str(), 35, 40, 0.5, true, black);
+
+    // Battery
     float batt = getBatteryVoltage();
     char battStr[16]; 
     sprintf(battStr, "%.2fV", batt);
     int battW = get_text_width_scaled(battStr, 0.5);
-    
     writeln_scaled(battStr, P_WIDTH - 35 - battW, 40, 0.5, true, black);
+
+    if (!touchEnabled) {
+        const char* lockMsg = "[LOCKED]";
+        int lockW = get_text_width_scaled(lockMsg, 0.5);
+        writeln_scaled(lockMsg, (P_WIDTH - lockW) / 2, 40, 0.5, true, black);
+    }
     
-    epd_draw_grayscale_image(area, framebuffer);
+    epd_draw_grayscale_image(headerArea, framebuffer);
+
+    // 2. Refresh Footer Area (Bottom 120px)
+    int footerStart = P_HEIGHT - 130;
+    Rect_t footerArea = {
+        .x = 0, // Starts at bottom in physical landscape
+        .y = 0,
+        .width = 130,
+        .height = (uint32_t)P_WIDTH
+    };
+
+    // Redraw Footer Base
+    fill_rect_rotated(0, footerStart, P_WIDTH, 130, COL_BG);
+    draw_line_rotated(30, footerStart, P_WIDTH - 30, footerStart, black);
+
+    // Progress Logic
+    long totalSize = 0;
+    if (path.startsWith("internal:")) totalSize = strlen(DEFAULT_BOOK_TEXT);
+    else {
+        File f = SD.open(path);
+        if (f) { totalSize = f.size(); f.close(); }
+    }
+    int progress = (totalSize > 0) ? (textPos * 100 / totalSize) : 0;
+    
+    // Time & Progress Text
+    int footerTextY = P_HEIGHT - 105;
+    String timeS = getTimeString();
+    writeln_scaled(timeS.c_str(), 35, footerTextY + 10, 0.45, false, gray);
+
+    char progStr[32]; 
+    sprintf(progStr, "%d%% completed", progress);
+    int progW = get_text_width_scaled(progStr, 0.45);
+    writeln_scaled(progStr, P_WIDTH - 35 - progW, footerTextY + 10, 0.45, false, gray);
+
+    // Progress Bar
+    int barX = 35;
+    int barY = footerTextY + 25;
+    int barW = P_WIDTH - 70;
+    draw_rect_rotated(barX, barY, barW, 4, gray);
+    if (progress > 0) {
+        fill_rect_rotated(barX, barY, (int)(barW * (progress / 100.0)), 4, black);
+    }
+
+    epd_draw_grayscale_image(footerArea, framebuffer);
     epd_poweroff();
 }
 
@@ -94,6 +154,12 @@ void updateReader(bool partial_refresh) {
         char battStr[16]; sprintf(battStr, "%.2fV", batt);
         int battW = get_text_width_scaled(battStr, 0.5);
         writeln_scaled(battStr, P_WIDTH - 35 - battW, 40, 0.5, true, black);
+
+        if (!touchEnabled) {
+            const char* lockMsg = "[LOCKED]";
+            int lockW = get_text_width_scaled(lockMsg, 0.5);
+            writeln_scaled(lockMsg, (P_WIDTH - lockW) / 2, 40, 0.5, true, black);
+        }
 
         // --- 2. Main Text Area ---
         if (partial_refresh) {

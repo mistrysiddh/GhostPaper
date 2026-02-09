@@ -149,6 +149,41 @@ void drawEnhancedBookCover(int x, int y, String title, int progress, int bookInd
     }
 }
 
+void partialUpdateLibraryHeader() {
+    if (appState != STATE_LIBRARY) return;
+
+    // Header area (0, 0) to (P_WIDTH, 90)
+    Rect_t area = {
+        .x = (int32_t)(960 - 1 - 90),
+        .y = 0,
+        .width = 90,
+        .height = (uint32_t)P_WIDTH
+    };
+
+    epd_poweron();
+    
+    // Redraw the black header background for this area in the framebuffer
+    fill_rect_rotated(0, 0, P_WIDTH, 90, COL_BLACK);
+
+    const char* header = "MY LIBRARY";
+    float titleScale = 0.9;
+    int hw = get_text_width_scaled(header, titleScale);
+    writeln_scaled(header, (P_WIDTH - hw) / 2, 45, titleScale, true, COL_WHITE);
+            
+    float infoScale = 0.4;
+    float batt = getBatteryVoltage();
+    char infoStr[64];
+    sprintf(infoStr, "%d items  |  %.2fV", (int)filteredBooks.size(), batt);
+    if (!touchEnabled) {
+        strcat(infoStr, "  |  [LOCKED]");
+    }
+    int iw = get_text_width_scaled(infoStr, infoScale);
+    writeln_scaled(infoStr, (P_WIDTH - iw) / 2, 75, infoScale, false, COL_WHITE);
+
+    epd_draw_grayscale_image(area, framebuffer);
+    epd_poweroff();
+}
+
 void updateLibrary() {
 
     if (DEBUG_ON) Serial.println(F("[UI] Rendering Enhanced Bookshelf Library..."));
@@ -191,9 +226,15 @@ void updateLibrary() {
 
     char infoStr[64];
 
-    sprintf(infoStr, "%d items  |  %.2fV", (int)filteredBooks.size(), batt);
+        sprintf(infoStr, "%d items  |  %.2fV", (int)filteredBooks.size(), batt);
 
-    int iw = get_text_width_scaled(infoStr, infoScale);
+        if (!touchEnabled) {
+
+            strcat(infoStr, "  |  [LOCKED]");
+
+        }
+
+        int iw = get_text_width_scaled(infoStr, infoScale);
 
     writeln_scaled(infoStr, (P_WIDTH - iw) / 2, 75, infoScale, false, COL_WHITE);
 

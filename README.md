@@ -22,10 +22,12 @@ GhostPage is a high-performance, minimalist E-Ink operating system designed for 
 - **GhostDrop (Wireless Sync)**: WiFi-powered book uploads via a simple web interface and QR code.
 - **Ultra-Fast Engine**: Highly optimized `.txt` rendering with custom font scaling and zero-latency page turns.
 - **Performance-First Core**: Scrubbed codebase with minimized memory footprint and efficient power-state management.
+- **Dynamic UI**: Real-time partial refreshes (every 1 min) for battery, clock, and progress bar with zero flicker.
 - **Anti-Ghosting**: Innovative "Physical Wash" technology for secure, trace-free transitions.
 
 ### 🔒 Privacy & Security
 - **Borderless Master Lock**: A sleek, minimalist PIN pad protecting your digital library.
+- **Hardware Touch Lock**: Hold IO21 for 2s to disable/enable touch inputs; status persists through deep sleep with a visible `[LOCKED]` indicator.
 - **Mandatory Setup**: Secure 6-digit PIN initialization on first boot.
 - **Auto-Secure**: Privacy screen activates after 5 minutes of inactivity.
 
@@ -55,7 +57,7 @@ Engineered exclusively for the **LilyGo T5-47 S3** (4.7-inch E-Paper display).
 
 ### Global
 - **Tap**: Select / Action.
-- **Hardware Button (IO21)**: System Wake / Resume.
+- **Hardware Button (IO21)**: System Wake / Resume. **Long press (2s)** toggles Touch Lock.
 
 ### Library
 - **Tap Header ("MY LIBRARY")**: Access **Library Menu** (Navigation, Refresh, Sync).

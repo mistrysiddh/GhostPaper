@@ -32,6 +32,8 @@ unsigned long lastInteraction = 0;
 unsigned long lastTouchTime = 0;
 PCF8563_Class rtc;
 bool touchReleased = true; // Guard for double clicks
+RTC_DATA_ATTR bool touchEnabled = true;
+Button2 btn1(BUTTON_1);
 
 // --- Visual Feedback Functions ---
 
@@ -1144,9 +1146,26 @@ void setup() {
     }
     
     lastInteraction = millis();
+
+    // 4. Configure Hardware Button
+    pinMode(BUTTON_1, INPUT_PULLUP);
+    btn1.setLongClickTime(2000);
+    btn1.setLongClickDetectedHandler([](Button2& b) {
+        touchEnabled = !touchEnabled;
+        Serial.printf("SYSTEM: Touch %s\n", touchEnabled ? "ENABLED" : "DISABLED");
+        
+        // Refresh UI to show state (optional, but cleaner than a black bar)
+        if (appState == STATE_READING) {
+            partialUpdateHeader();
+        } else if (appState == STATE_LIBRARY) {
+            partialUpdateLibraryHeader();
+        }
+    });
 }
 
 void loop() { 
+    btn1.loop();
+
     static unsigned long lastBeat = 0;
     if (millis() - lastBeat > 1000) {
         lastBeat = millis();
@@ -1161,15 +1180,16 @@ void loop() {
         server.handleClient();
     }
 
-    // Header sync (Reduced to 5 minutes to minimize flashing)
+    // Dynamic UI sync (Every 1 minute for accurate clock and status)
     static unsigned long lastHeaderUpdate = 0;
-    if (appState == STATE_READING && (millis() - lastHeaderUpdate > 300000)) {
-        partialUpdateHeader();
+    if ((appState == STATE_READING || appState == STATE_LIBRARY) && (millis() - lastHeaderUpdate > 60000)) {
+        if (appState == STATE_READING) partialUpdateHeader();
+        else if (appState == STATE_LIBRARY) partialUpdateLibraryHeader();
         lastHeaderUpdate = millis();
     }
 
     // Direct Touch using TouchDrvGT911
-    if (millis() > lastTouchTime + TOUCH_COOLDOWN) {
+    if (touchEnabled && (millis() > lastTouchTime + TOUCH_COOLDOWN)) {
         int16_t tx[5], ty[5];
         uint8_t n = touch.getPoint(tx, ty); // Returns number of points
 

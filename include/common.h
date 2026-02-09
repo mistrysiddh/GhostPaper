@@ -31,9 +31,11 @@ extern Preferences prefs;
 extern TouchDrvGT911 touch;
 extern PCF8563_Class rtc;
 extern std::vector<long> pageHistory;
+extern RTC_DATA_ATTR bool touchEnabled;
 
 // --- Prototypes ---
 void updateLibrary();
+void partialUpdateLibraryHeader();
 void applyLibraryFilter();
 void drawEnhancedBookCover(int x, int y, String title, int progress, int bookIndex);
 void updateReader(bool partial_refresh = false);

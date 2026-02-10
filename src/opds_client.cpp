@@ -28,120 +28,142 @@ bool isOpdsFeed(const char* type) {
 }
 
 std::vector<OpdsEntry> OpdsClient::fetchCatalog(String url) {
-    std::vector<OpdsEntry> entries;
-    errorMsg = ""; 
-
-    if (WiFi.status() != WL_CONNECTED) {
-        errorMsg = "WiFi Not Connected";
-        return entries;
-    }
-
-    delay(200);
-    Serial.printf("OPDS: Fetching %s\n", url.c_str());
-
-    HTTPClient http;
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    http.setTimeout(20000); 
-    http.setUserAgent("Mozilla/5.0"); 
+    std::vector<OpdsEntry> allEntries;
+    String nextUrl = url;
+    int pagesFetched = 0;
+    const int MAX_PAGES = 20; // Fetch up to ~500 books
+    const int MIN_FREE_PSRAM = 100000; // Stop if less than 100KB PSRAM remaining
     
-    const char * headerKeys[] = {"Location"};
-    http.collectHeaders(headerKeys, 1);
+    errorMsg = "";
 
-    WiFiClient* client = NULL;
-    bool beginSuccess = false;
-    if (url.startsWith("https")) {
-        WiFiClientSecure *sClient = new WiFiClientSecure();
-        sClient->setInsecure();
-        client = sClient;
-        beginSuccess = http.begin(*sClient, url);
-    } else {
-        client = new WiFiClient();
-        beginSuccess = http.begin(*client, url);
-    }
+    while (nextUrl != "" && pagesFetched < MAX_PAGES) {
+        // Safety Check: Memory
+        if (ESP.getPsramSize() > 0 && ESP.getFreePsram() < MIN_FREE_PSRAM) {
+            Serial.println("OPDS: Memory limit reached, stopping fetch.");
+            break;
+        }
 
-    if (!beginSuccess) {
-        errorMsg = "HTTP Begin Failed";
-        http.end();
-        if (client) delete client;
-        return entries;
-    }
-    
-    int httpCode = http.GET();
-    if (httpCode == 301 || httpCode == 302) {
-        String newUrl = http.header("Location");
-        http.end();
-        if (client) delete client;
-        return fetchCatalog(newUrl); 
-    }
+        if (WiFi.status() != WL_CONNECTED) {
+            errorMsg = "WiFi Lost";
+            break;
+        }
 
-    if (httpCode == HTTP_CODE_OK) {
-        String payload = http.getString();
-        XMLDocument doc;
-        if (doc.Parse(payload.c_str()) == XML_SUCCESS) {
-            XMLElement* root = doc.RootElement(); 
-            if (root) {
-                XMLElement* entry = root->FirstChildElement();
-                int count = 0;
-                while (entry && count < 50) { 
-                    const char* name = entry->Name();
-                    if (name && strstr(name, "entry")) {
-                        OpdsEntry e;
-                        XMLElement* child = entry->FirstChildElement();
-                        String fallbackLink = "";
-                        
-                        while (child) {
-                            const char* cName = child->Name();
-                            if (strstr(cName, "title")) e.title = (child->GetText() ? child->GetText() : "");
-                            else if (strstr(cName, "author")) {
-                                XMLElement* n = findTag(child, "name");
-                                if (n && n->GetText()) e.author = n->GetText();
-                            }
-                            else if (strstr(cName, "link")) {
-                                const char* rel = child->Attribute("rel");
-                                const char* type = child->Attribute("type");
-                                const char* href = child->Attribute("href");
-                                if (rel && href) {
-                                    if ((strstr(rel, "acquisition") || strstr(rel, "open-access")) && 
-                                        (type && strstr(type, "text/plain"))) {
-                                        e.downloadUrl = href;
-                                    }
-                                    if (isOpdsFeed(type)) {
-                                        if (fallbackLink == "") fallbackLink = href;
-                                    }
+        Serial.printf("OPDS: Fetching Page %d: %s\n", pagesFetched + 1, nextUrl.c_str());
+
+        HTTPClient http;
+        http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+        http.setTimeout(20000);
+        http.setUserAgent("Mozilla/5.0");
+        
+        const char * headerKeys[] = {"Location"};
+        http.collectHeaders(headerKeys, 1);
+
+        WiFiClient* client = NULL;
+        if (nextUrl.startsWith("https")) {
+            WiFiClientSecure *sClient = new WiFiClientSecure();
+            sClient->setInsecure();
+            client = sClient;
+            http.begin(*sClient, nextUrl);
+        } else {
+            client = new WiFiClient();
+            http.begin(*client, nextUrl);
+        }
+
+        int httpCode = http.GET();
+        if (httpCode == 301 || httpCode == 302) {
+            nextUrl = http.header("Location");
+            http.end();
+            if (client) delete client;
+            continue; // Re-run loop with new URL
+        }
+
+        if (httpCode == HTTP_CODE_OK) {
+            String payload = http.getString();
+            XMLDocument doc;
+            if (doc.Parse(payload.c_str()) == XML_SUCCESS) {
+                XMLElement* root = doc.RootElement(); 
+                if (root) {
+                    // Update nextPageUrl for the UI (this will be the URL for page 4, 7, 10...)
+                    nextPageUrl = ""; 
+                    XMLElement* link = root->FirstChildElement();
+                    while (link) {
+                        const char* lName = link->Name();
+                        if (lName && strstr(lName, "link")) {
+                            const char* rel = link->Attribute("rel");
+                            const char* href = link->Attribute("href");
+                            if (rel && href && strstr(rel, "next")) {
+                                nextPageUrl = String(href);
+                                if (nextPageUrl.startsWith("/")) {
+                                    int slash3 = nextUrl.indexOf('/', 8);
+                                    String base = (slash3 > 0) ? nextUrl.substring(0, slash3) : nextUrl;
+                                    nextPageUrl = base + nextPageUrl;
                                 }
                             }
-                            child = child->NextSiblingElement();
                         }
-                        
-                        if (e.downloadUrl == "" && fallbackLink != "") e.downloadUrl = "resolve:" + fallbackLink;
-
-                        if (e.title != "" && e.downloadUrl != "") {
-                            if (e.downloadUrl.startsWith("/")) {
-                                if (url.startsWith("http")) {
-                                    int slash3 = url.indexOf('/', 8);
-                                    String base = (slash3 > 0) ? url.substring(0, slash3) : url;
-                                    if (e.downloadUrl.startsWith("resolve:/")) {
-                                        e.downloadUrl = "resolve:" + base + e.downloadUrl.substring(8);
-                                    } else {
-                                        e.downloadUrl = base + e.downloadUrl;
-                                    }
-                                }
-                            }
-                            entries.push_back(e);
-                            count++;
-                        }
+                        link = link->NextSiblingElement();
                     }
-                    entry = entry->NextSiblingElement();
+
+                    // Parse Entries
+                    XMLElement* entry = root->FirstChildElement();
+                    while (entry) {
+                        const char* name = entry->Name();
+                        if (name && strstr(name, "entry")) {
+                            OpdsEntry e;
+                            XMLElement* child = entry->FirstChildElement();
+                            String fallbackLink = "";
+                            
+                            while (child) {
+                                const char* cName = child->Name();
+                                if (strstr(cName, "title")) e.title = (child->GetText() ? child->GetText() : "");
+                                else if (strstr(cName, "author")) {
+                                    XMLElement* n = findTag(child, "name");
+                                    if (n && n->GetText()) e.author = n->GetText();
+                                }
+                                else if (strstr(cName, "link")) {
+                                    const char* rel = child->Attribute("rel");
+                                    const char* type = child->Attribute("type");
+                                    const char* href = child->Attribute("href");
+                                    if (rel && href) {
+                                        if ((strstr(rel, "acquisition") || strstr(rel, "open-access")) && 
+                                            (type && strstr(type, "text/plain"))) {
+                                            e.downloadUrl = href;
+                                        }
+                                        if (isOpdsFeed(type)) {
+                                            if (fallbackLink == "") fallbackLink = href;
+                                        }
+                                    }
+                                }
+                                child = child->NextSiblingElement();
+                            }
+                            
+                            if (e.downloadUrl == "" && fallbackLink != "") e.downloadUrl = "resolve:" + fallbackLink;
+
+                            if (e.title != "" && e.downloadUrl != "") {
+                                if (e.downloadUrl.startsWith("/")) {
+                                    int slash3 = nextUrl.indexOf('/', 8);
+                                    String base = (slash3 > 0) ? nextUrl.substring(0, slash3) : nextUrl;
+                                    if (e.downloadUrl.startsWith("resolve:/")) e.downloadUrl = "resolve:" + base + e.downloadUrl.substring(8);
+                                    else e.downloadUrl = base + e.downloadUrl;
+                                }
+                                allEntries.push_back(e);
+                            }
+                        }
+                        entry = entry->NextSiblingElement();
+                    }
                 }
             }
+            pagesFetched++;
+            nextUrl = nextPageUrl; // Move to the next page for the next iteration
+        } else {
+            errorMsg = "HTTP " + String(httpCode);
+            nextUrl = ""; // Stop
         }
-    } else {
-        errorMsg = "HTTP " + String(httpCode);
+        
+        http.end();
+        if (client) delete client;
     }
     
-    http.end();
-    if (client) delete client;
-    return entries;
+    return allEntries;
 }
 
 String OpdsClient::resolveBookUrl(String startUrl) {

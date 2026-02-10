@@ -15,11 +15,12 @@ String getSanitizedFilename(String title) {
 
 // --- Store State ---
 std::vector<OpdsEntry> storeCatalog;
+std::vector<String> storeHistory;
+String currentStoreUrl = "https://www.gutenberg.org/ebooks/search.opds/?sort_order=downloads";
 int storeScrollOffset = 0;
 String downloadStatus = "";
 
 OpdsClient opds;
-String OPDS_URL = "https://www.gutenberg.org/ebooks/search.opds/?sort_order=downloads"; 
 
 void drawProgressBar(int percent) {
     int footerY = P_HEIGHT - 90;
@@ -71,7 +72,7 @@ void syncStore() {
         epd_draw_grayscale_image(epd_full_screen(), framebuffer);
         epd_poweroff();
 
-        storeCatalog = opds.fetchCatalog(OPDS_URL);
+        storeCatalog = opds.fetchCatalog(currentStoreUrl);
         storeScrollOffset = 0;
         downloadStatus = storeCatalog.empty() ? opds.getLastError() : "";
     } else {
@@ -187,10 +188,16 @@ void updateStore() {
         writeln_scaled(pgStr, (P_WIDTH - ptw)/2, footerY + 60, 0.5, true, COL_BLACK);
     }
 
-    if (storeScrollOffset > 0) writeln_scaled("< BACK", 30, footerY + 60, 0.5, true, COL_BLACK);
+    if (storeScrollOffset > 0) writeln_scaled("< PREV", 30, footerY + 60, 0.5, true, COL_BLACK);
+    else if (!storeHistory.empty()) writeln_scaled("<< PAGE", 30, footerY + 60, 0.5, true, COL_BLACK);
+
     if (storeScrollOffset + itemsPerPage < (int)storeCatalog.size()) {
         int nw = get_text_width_scaled("NEXT >", 0.5);
         writeln_scaled("NEXT >", P_WIDTH - 30 - nw, footerY + 60, 0.5, true, COL_BLACK);
+    } else if (opds.getNextPageUrl() != "") {
+        const char* ntxt = "PAGE >>";
+        int nw = get_text_width_scaled(ntxt, 0.5);
+        writeln_scaled(ntxt, P_WIDTH - 30 - nw, footerY + 60, 0.5, true, COL_BLACK);
     }
     
     if (opds.downloadProgress >= 0) {
@@ -218,10 +225,22 @@ void handleStoreTouch(int x, int y) {
         return;
     }
     if (y > P_HEIGHT - 90) {
-        if (x < P_WIDTH * 0.3 && storeScrollOffset >= 5) {
-            storeScrollOffset -= 5; updateStore();
-        } else if (x > P_WIDTH * 0.7 && storeScrollOffset + 5 < (int)storeCatalog.size()) {
-            storeScrollOffset += 5; updateStore();
+        if (x < P_WIDTH * 0.3) {
+            if (storeScrollOffset >= 5) {
+                storeScrollOffset -= 5; updateStore();
+            } else if (!storeHistory.empty()) {
+                currentStoreUrl = storeHistory.back();
+                storeHistory.pop_back();
+                syncStore(); updateStore();
+            }
+        } else if (x > P_WIDTH * 0.7) {
+            if (storeScrollOffset + 5 < (int)storeCatalog.size()) {
+                storeScrollOffset += 5; updateStore();
+            } else if (opds.getNextPageUrl() != "") {
+                storeHistory.push_back(currentStoreUrl);
+                currentStoreUrl = opds.getNextPageUrl();
+                syncStore(); updateStore();
+            }
         } else if (x > P_WIDTH * 0.3 && x < P_WIDTH * 0.7) {
             WiFi.disconnect(true); WiFi.mode(WIFI_OFF);
             appState = STATE_LIBRARY; showTransitionEffect(); updateLibrary();

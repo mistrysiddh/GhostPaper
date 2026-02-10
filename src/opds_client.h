@@ -20,9 +20,13 @@ public:
     String resolveBookUrl(String startUrl);
     bool downloadBook(String url, String targetPath, std::function<void(int)> progressCallback = nullptr);
     String getLastError() { return errorMsg; }
+    String getNextPageUrl() { return nextPageUrl; }
 
     // Progress tracking
     int downloadProgress = -1; 
     int totalBytes = 0;
     int currentBytes = 0;
+
+private:
+    String nextPageUrl;
 };

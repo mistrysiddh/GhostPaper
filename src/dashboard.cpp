@@ -16,27 +16,28 @@ void drawHorizontalDivider(int y) {
     draw_line_rotated(40, y, P_WIDTH - 40, y, COL_BLACK);
 }
 
+void drawWallpaper() {
+    // Elegant frame around the entire screen
+    draw_rect_rotated(10, 10, P_WIDTH - 20, P_HEIGHT - 20, 0xF0);
+    
+    // Vertical "Column" accents for the Newspaper feel
+    draw_line_rotated(35, 100, 35, P_HEIGHT - 100, 0xF2);
+    draw_line_rotated(P_WIDTH - 35, 100, P_WIDTH - 35, P_HEIGHT - 100, 0xF2);
+}
+
 void drawHeroHeader() {
     // 1. Large Minimal Clock
     String timeS = getTimeString();
     bool oldSerif = useSerif;
-    useSerif = false; // Sans for time
-    int timeW = get_text_width_scaled(timeS.c_str(), 2.4);
-    writeln_scaled(timeS.c_str(), (P_WIDTH - timeW)/2, 100, 2.4, true, COL_BLACK);
+    useSerif = false; 
+    int timeW = get_text_width_scaled(timeS.c_str(), 2.2);
+    writeln_scaled(timeS.c_str(), (P_WIDTH - timeW)/2, 90, 2.2, true, COL_BLACK);
     
-    // 2. Elegant Date & Battery
-    useSerif = true; // Serif for date
+    // 2. Date
+    useSerif = true;
     const char* dateS = "TUESDAY, FEBRUARY 10"; 
-    int dateW = get_text_width_scaled(dateS, 0.45);
-    writeln_scaled(dateS, (P_WIDTH - dateW)/2, 140, 0.45, true, COL_DARK);
-    
-    // Battery Percentage (Minimal)
-    float batt = getBatteryVoltage();
-    int pct = map((int)(batt * 100), 330, 420, 0, 100);
-    if (pct > 100) pct = 100; if (pct < 0) pct = 0;
-    char bStr[16]; sprintf(bStr, "%d%% PWR", pct);
-    int bw = get_text_width_scaled(bStr, 0.35);
-    writeln_scaled(bStr, (P_WIDTH - bw)/2, 165, 0.35, false, COL_GRAY);
+    int dateW = get_text_width_scaled(dateS, 0.4);
+    writeln_scaled(dateS, (P_WIDTH - dateW)/2, 125, 0.4, true, COL_DARK);
     useSerif = oldSerif;
 }
 
@@ -132,30 +133,6 @@ void drawGlobalNav() {
     }
 }
 
-void drawWallpaper() {
-    // 1. Subtle Dot Grid (very light gray)
-    for (int x = 30; x < P_WIDTH; x += 60) {
-        for (int y = 30; y < P_HEIGHT; y += 60) {
-            draw_pixel_rotated(x, y, 0xEE); // Extremely faint stippling
-        }
-    }
-
-    // 2. Sophisticated corner "etchings"
-    // Top-Right Corner
-    for (int i=0; i<8; i++) {
-        draw_line_rotated(P_WIDTH - 150 + (i*12), 0, P_WIDTH, 150 - (i*12), 0xF2);
-    }
-    
-    // Bottom-Left Corner
-    for (int i=0; i<8; i++) {
-        draw_line_rotated(0, P_HEIGHT - 150 + (i*12), 150 - (i*12), P_HEIGHT, 0xF2);
-    }
-
-    // 3. Faint Architectural Guide Lines
-    draw_line_rotated(15, 100, 15, P_HEIGHT - 100, 0xF4);
-    draw_line_rotated(P_WIDTH - 15, 100, P_WIDTH - 15, P_HEIGHT - 100, 0xF4);
-}
-
 void updateDashboard() {
     fetchDashboardData();
     epd_poweron();
@@ -165,14 +142,20 @@ void updateDashboard() {
     drawWallpaper();
     drawHeroHeader();
     
-    drawHorizontalDivider(200);
-    drawWeatherStrip(210);
+    // --- PLACEHOLDER FOR ILLUSTRATION ---
+    // (A wolf-girl illustration would fit perfectly here)
+    int illY = 150;
+    int illH = 250;
+    // draw_grayscale_image(hero_illustration, illY); 
     
-    drawHorizontalDivider(300);
-    drawElegantQuote(320, 300);
+    drawHorizontalDivider( illY + illH + 10 );
+    drawWeatherStrip( illY + illH + 20 );
     
-    drawHorizontalDivider(620);
-    drawAgenda(640);
+    drawHorizontalDivider( illY + illH + 100 );
+    drawElegantQuote( illY + illH + 120, 250);
+    
+    drawHorizontalDivider( illY + illH + 380 );
+    drawAgenda( illY + illH + 400 );
     
     drawGlobalNav();
 
@@ -222,116 +205,56 @@ void fetchDashboardData() {
             http.end();
         }
 
-                // 2. Quote
-
-                if (http.begin(client, "https://api.quotable.io/random?tags=literature|wisdom")) {
-
-                    int code = http.GET();
-
-                    if (code == 200) {
-
-                        String payload = http.getString();
-
-                        int qS = payload.indexOf("\"content\":\"") + 11;
-
-                        int qE = payload.indexOf("\"", qS);
-
-                        if (qS > 10) onlineQuote = payload.substring(qS, qE);
-
-                        int aS = payload.indexOf("\"author\":\"") + 10;
-
-                        int aE = payload.indexOf("\"", aS);
-
-                        if (aS > 9) onlineAuthor = payload.substring(aS, aE);
-
-                    }
-
-                    http.end();
-
-                }
-
-        
-
-                // 3. Outlook Calendar (ICS)
-
-                if (http.begin(client, "https://outlook.office365.com/owa/calendar/140c083fb557498894d90a9f2264cf6c@mistrysiddh.com/e21ab2dfb37e46aea043c2bcc75b86c85675685166080299637/calendar.ics")) {
-
-                    int code = http.GET();
-
-                    if (code == 200) {
-
-                        events.clear();
-
-                        WiFiClient *stream = http.getStreamPtr();
-
-                        while (stream->available()) {
-
-                            String line = stream->readStringUntil('\n');
-
-                            line.trim();
-
-                            if (line.startsWith("BEGIN:VEVENT")) {
-
-                                String summary = "", start = "";
-
-                                while (stream->available()) {
-
-                                    line = stream->readStringUntil('\n');
-
-                                    line.trim();
-
-                                    if (line.startsWith("SUMMARY:")) {
-
-                                        summary = line.substring(8);
-
-                                        // Simple cleaning for Outlook SUMMARY
-
-                                        summary.replace("\\,", ",");
-
-                                    }
-
-                                    else if (line.startsWith("DTSTART")) {
-
-                                        int colon = line.indexOf(':');
-
-                                        if (colon > 0) {
-
-                                            String raw = line.substring(colon + 1); // 20240210T090000Z
-
-                                            if (raw.length() >= 13) {
-
-                                                start = raw.substring(9, 11) + ":" + raw.substring(11, 13);
-
-                                            }
-
-                                        }
-
-                                    }
-
-                                    else if (line.startsWith("END:VEVENT")) break;
-
-                                }
-
-                                if (summary != "" && start != "") {
-
-                                    events.push_back({start, summary});
-
-                                }
-
-                                if (events.size() > 6) break;
-
-                            }
-
-                        }
-
-                    }
-
-                    http.end();
-
-                }
-
+        // 2. Quote
+        if (http.begin(client, "https://api.quotable.io/random?tags=literature|wisdom")) {
+            int code = http.GET();
+            if (code == 200) {
+                String payload = http.getString();
+                int qS = payload.indexOf("\"content\":\"") + 11;
+                int qE = payload.indexOf("\"", qS);
+                if (qS > 10) onlineQuote = payload.substring(qS, qE);
+                int aS = payload.indexOf("\"author\":\"") + 10;
+                int aE = payload.indexOf("\"", aS);
+                if (aS > 9) onlineAuthor = payload.substring(aS, aE);
             }
-
+            http.end();
         }
 
-        
+        // 3. Outlook Calendar (ICS)
+        if (http.begin(client, "https://outlook.office365.com/owa/calendar/140c083fb557498894d90a9f2264cf6c@mistrysiddh.com/e21ab2dfb37e46aea043c2bcc75b86c85675685166080299637/calendar.ics")) {
+            int code = http.GET();
+            if (code == 200) {
+                events.clear();
+                WiFiClient *stream = http.getStreamPtr();
+                while (stream->available()) {
+                    String line = stream->readStringUntil('\n');
+                    line.trim();
+                    if (line.startsWith("BEGIN:VEVENT")) {
+                        String summary = "", start = "";
+                        while (stream->available()) {
+                            line = stream->readStringUntil('\n');
+                            line.trim();
+                            if (line.startsWith("SUMMARY:")) {
+                                summary = line.substring(8);
+                                summary.replace("\\,", ",");
+                            }
+                            else if (line.startsWith("DTSTART")) {
+                                int colon = line.indexOf(':');
+                                if (colon > 0) {
+                                    String raw = line.substring(colon + 1); 
+                                    if (raw.length() >= 13) {
+                                        start = raw.substring(9, 11) + ":" + raw.substring(11, 13);
+                                    }
+                                }
+                            }
+                            else if (line.startsWith("END:VEVENT")) break;
+                        }
+                        if (summary != "" && start != "") events.push_back({start, summary});
+                        if (events.size() > 6) break;
+                    }
+                }
+            }
+            http.end();
+        }
+    }
+}

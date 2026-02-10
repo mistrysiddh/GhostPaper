@@ -68,6 +68,7 @@ void updateWiFiSetup(bool partial = false);
 void handleWiFiTouch(int x, int y);
 void startWiFiScan();
 void partialUpdateRegion(int x, int y, int w, int h);
+void epd_draw_grayscale_image_area(Rect_t area, uint8_t *full_fb);
 
 // --- Graphics Prototypes ---
 void draw_pixel_rotated(int16_t x, int16_t y, uint8_t gray);

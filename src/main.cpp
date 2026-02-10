@@ -1278,14 +1278,16 @@ void loop() {
 
 void partialUpdateRegion(int x, int y, int w, int h) {
     Rect_t area = {
-        .x = (int32_t)(960 - 1 - (y + h)),
+        .x = (int32_t)(960 - (y + h)),
         .y = (int32_t)x,
-        .width = (int32_t)h,
-        .height = (int32_t)w
+        .width = (uint32_t)h,
+        .height = (uint32_t)w
     };
+    epd_poweron();
     // 3. THE "PHYSICAL WASH" (To clear ghosting before redraw)
     for (int i = 0; i < 2; i++) epd_push_pixels(area, 50, 1);
-    epd_draw_grayscale_image(area, framebuffer);
+    epd_draw_grayscale_image_area(area, framebuffer);
+    epd_poweroff();
 }
 
 void partialUpdateWiFiPassword() {
@@ -1453,7 +1455,7 @@ void handleWiFiTouch(int x, int y) {
 
     // Helper for instant feedback
     auto feedback = [&](int fx, int fy, int fw, int fh) {
-        Rect_t area = { .x = (int32_t)(960 - 1 - (fy + fh)), .y = (int32_t)fx, .width = (int32_t)fh, .height = (int32_t)fw };
+        Rect_t area = { .x = (int32_t)(960 - (fy + fh)), .y = (int32_t)fx, .width = (uint32_t)fh, .height = (uint32_t)fw };
         epd_poweron(); epd_push_pixels(area, 30, 0); epd_poweroff();
     };
 
@@ -1488,7 +1490,7 @@ void handleWiFiTouch(int x, int y) {
         int keyW = (P_WIDTH - 40 - (9 * gap)) / 10;
 
         auto keyFeedback = [&](int kx, int ky, int kw_val) {
-            Rect_t btn = { .x = (int32_t)(960 - 1 - (ky + keyH)), .y = (int32_t)kx, .width = (int32_t)keyH, .height = (int32_t)kw_val };
+            Rect_t btn = { .x = (int32_t)(960 - (ky + keyH)), .y = (int32_t)kx, .width = (uint32_t)keyH, .height = (uint32_t)kw_val };
             epd_poweron(); epd_push_pixels(btn, 30, 0); epd_poweroff();
         };
 

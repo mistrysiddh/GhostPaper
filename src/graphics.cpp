@@ -2,6 +2,7 @@
 #include "firasans.h"
 #include "crimson.h"
 #include "zlib/zlib.h"
+#include <esp_heap_caps.h>
 
 // --- Helper for Circle Section ---
 void draw_circle_section(int16_t x0, int16_t y0, int16_t r, uint8_t corners, uint8_t color) {
@@ -137,8 +138,40 @@ int get_text_width_scaled(const char* string, float scale) {
 
 void writeln_scaled(const char *string, int x, int y, float scale, bool bold, uint8_t color) {
     const char* p = string; int curX = x;
-    while (*p) {
-        uint32_t cp = decode_utf8(&p);
-        curX += drawChar(cp, curX, y, scale, bold, color);
+        while (*p) {
+            uint32_t cp = decode_utf8(&p);
+            curX += drawChar(cp, curX, y, scale, bold, color);
+        }
     }
-}
+    
+    void epd_draw_grayscale_image_area(Rect_t area, uint8_t *full_fb) {
+        if (area.width == EPD_WIDTH && area.x == 0 && area.y == 0 && area.height == EPD_HEIGHT) {
+            epd_draw_grayscale_image(area, full_fb);
+            return;
+        }
+    
+        int row_bytes = area.width / 2 + area.width % 2;
+        size_t size = row_bytes * area.height;
+        uint8_t* temp_buf = (uint8_t*)heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!temp_buf) temp_buf = (uint8_t*)malloc(size);
+        if (!temp_buf) return;
+    
+        for (int y = 0; y < area.height; y++) {
+            for (int x = 0; x < area.width; x++) {
+                int fb_x = area.x + x;
+                int fb_y = area.y + y;
+                uint8_t color = 0;
+                if (fb_x >= 0 && fb_x < EPD_WIDTH && fb_y >= 0 && fb_y < EPD_HEIGHT) {
+                    uint8_t *ptr = &full_fb[fb_y * EPD_WIDTH / 2 + fb_x / 2];
+                    if (fb_x % 2) color = (*ptr & 0xF0);
+                    else color = (*ptr & 0x0F) << 4;
+                }
+                uint8_t *out_ptr = &temp_buf[y * row_bytes + x / 2];
+                if (x % 2) *out_ptr = (*out_ptr & 0x0F) | (color & 0xF0);
+                else *out_ptr = (*out_ptr & 0xF0) | (color >> 4);
+            }
+        }
+        epd_draw_grayscale_image(area, temp_buf);
+        free(temp_buf);
+    }
+    

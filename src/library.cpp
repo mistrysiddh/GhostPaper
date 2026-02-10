@@ -154,10 +154,10 @@ void partialUpdateLibraryHeader() {
 
     // Header area (0, 0) to (P_WIDTH, 90)
     Rect_t area = {
-        .x = (int32_t)(960 - 1 - 90),
+        .x = (int32_t)(960 - 90),
         .y = 0,
         .width = 90,
-        .height = (int32_t)P_WIDTH
+        .height = (uint32_t)P_WIDTH
     };
 
     epd_poweron();
@@ -180,7 +180,7 @@ void partialUpdateLibraryHeader() {
     int iw = get_text_width_scaled(infoStr, infoScale);
     writeln_scaled(infoStr, (P_WIDTH - iw) / 2, 75, infoScale, false, COL_WHITE);
 
-    epd_draw_grayscale_image(area, framebuffer);
+    epd_draw_grayscale_image_area(area, framebuffer);
     epd_poweroff();
 }
 

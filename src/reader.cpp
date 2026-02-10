@@ -6,7 +6,7 @@ void partialUpdateHeader() {
     
     // 1. Refresh Header Area (Top 70px)
     Rect_t headerArea = {
-        .x = (int32_t)(960 - 1 - 70),
+        .x = (int32_t)(960 - 70),
         .y = 0,
         .width = 70,
         .height = (int32_t)P_WIDTH
@@ -41,7 +41,7 @@ void partialUpdateHeader() {
         writeln_scaled(lockMsg, (P_WIDTH - lockW) / 2, 40, 0.5, true, black);
     }
     
-    epd_draw_grayscale_image(headerArea, framebuffer);
+    epd_draw_grayscale_image_area(headerArea, framebuffer);
 
     // 2. Refresh Footer Area (Bottom 120px)
     int footerStart = P_HEIGHT - 130;
@@ -84,7 +84,7 @@ void partialUpdateHeader() {
         fill_rect_rotated(barX, barY, (int)(barW * (progress / 100.0)), 4, black);
     }
 
-    epd_draw_grayscale_image(footerArea, framebuffer);
+    epd_draw_grayscale_image_area(footerArea, framebuffer);
     epd_poweroff();
 }
 
@@ -164,7 +164,7 @@ void updateReader(bool partial_refresh) {
         // --- 2. Main Text Area ---
         if (partial_refresh) {
             Rect_t textCardArea = {
-                .x = (int32_t)(960 - 1 - (boxTop + boxH)),
+                .x = (int32_t)(960 - (boxTop + boxH)),
                 .y = (int32_t)boxMargin,
                 .width = (int32_t)boxH,
                 .height = (int32_t)boxW

@@ -1260,6 +1260,22 @@ void setup() {
 
     // 4. Configure Hardware Button
     pinMode(BUTTON_1, INPUT_PULLUP);
+    btn1.setClickHandler([](Button2& b) {
+        if (appState == STATE_SCREENSAVER) {
+            appState = STATE_LIBRARY; // Default back to library or you could track last state
+            // Better: restore based on existing state logic
+            lastInteraction = millis();
+            showTransitionEffect();
+            if (activePin != "") {
+                appState = STATE_PRIVACY;
+                drawPinPad(false);
+            } else {
+                appState = STATE_LIBRARY;
+                updateLibrary();
+            }
+            return;
+        }
+    });
     btn1.setLongClickTime(2000);
     btn1.setLongClickDetectedHandler([](Button2& b) {
         touchEnabled = !touchEnabled;
@@ -1282,9 +1298,15 @@ void loop() {
         lastBeat = millis();
     }
 
-    // Deep Sleep Logic (5 Minutes total inactivity)
-    if (millis() - lastInteraction > 300000) {
-        goToDeepSleep();
+    // Screensaver Logic (5 Minutes total inactivity)
+    if (appState != STATE_SCREENSAVER && (millis() - lastInteraction > 300000)) {
+        appState = STATE_SCREENSAVER;
+        epd_poweron();
+        memset(framebuffer, 0xFF, L_WIDTH * L_HEIGHT / 2);
+        draw_bmp_rotated("/images/dashboard.bmp", 90, 210);
+        epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+        epd_poweroff();
+        Serial.println(F("SYSTEM: Entering Screensaver Mode..."));
     }
 
     if (appState == STATE_GHOSTDROP) {
@@ -1292,7 +1314,7 @@ void loop() {
     }
 
     // Direct Touch using TouchDrvGT911
-    if (touchEnabled && (millis() > lastTouchTime + TOUCH_COOLDOWN)) {
+    if (appState != STATE_SCREENSAVER && touchEnabled && (millis() > lastTouchTime + TOUCH_COOLDOWN)) {
         int16_t tx[5], ty[5];
         uint8_t n = touch.getPoint(tx, ty); // Returns number of points
 

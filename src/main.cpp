@@ -24,7 +24,6 @@ RTC_DATA_ATTR float fontScale = 1.15;
 RTC_DATA_ATTR long lastPageByteCount = 0;
 RTC_DATA_ATTR int focusedBookIndex = -1;
 RTC_DATA_ATTR bool useSerif = false;
-RTC_DATA_ATTR bool isGuestMode = false;
 
 uint8_t *framebuffer = NULL;
 std::vector<String> books;
@@ -460,18 +459,10 @@ void handlePinTouch(int x, int y) {
             }
         } else {
             if (enteredPin == activePin) {
-                isGuestMode = false;
                 showTransitionEffect();
                 appState = STATE_DASHBOARD;
                 updateDashboard();
                 enteredPin = ""; 
-                return;
-            } else if (enteredPin == "999999") { // Duress PIN
-                isGuestMode = true;
-                showTransitionEffect();
-                appState = STATE_DASHBOARD;
-                updateDashboard();
-                enteredPin = "";
                 return;
             } else {
                 enteredPin = "";
@@ -484,18 +475,10 @@ void handlePinTouch(int x, int y) {
             // Auto-Unlock Check
             if (appState == STATE_PRIVACY && enteredPin.length() == 6) {
                 if (enteredPin == activePin) {
-                    isGuestMode = false;
                     showTransitionEffect();
                     appState = STATE_DASHBOARD;
                     updateDashboard();
                     enteredPin = ""; 
-                    return;
-                } else if (enteredPin == "999999") { // Duress PIN
-                    isGuestMode = true;
-                    showTransitionEffect();
-                    appState = STATE_DASHBOARD;
-                    updateDashboard();
-                    enteredPin = "";
                     return;
                 } else {
                     // Flash error or clear if wrong (Privacy Screen)
@@ -1080,9 +1063,6 @@ String getPrefKey(String path) {
 void applyLibraryFilter() {
     filteredBooks.clear();
     for (const auto& path : books) {
-        String fName = path.substring(path.lastIndexOf('/') + 1);
-        if (isGuestMode && fName.startsWith("private_")) continue;
-
         if (libraryFilter == FILTER_ALL) {
             filteredBooks.push_back(path);
             continue;

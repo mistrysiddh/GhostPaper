@@ -86,5 +86,6 @@ void writeln_scaled(const char *string, int x, int y, float scale, bool bold, ui
 int get_text_width_scaled(const char* string, float scale);
 uint32_t decode_utf8(const char** s);
 void draw_bmp_rotated(const char* path, int16_t x, int16_t y);
+void draw_bmp_stretched_rotated(const char* path, int16_t x, int16_t y, int16_t targetW, int16_t targetH);
 
 #endif

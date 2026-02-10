@@ -1304,7 +1304,8 @@ void loop() {
         epd_poweron();
         epd_clear(); // Full hardware refresh (flashing) to clear all ghosting
         memset(framebuffer, 0xFF, L_WIDTH * L_HEIGHT / 2);
-        draw_bmp_rotated("/images/dashboard.bmp", 0, 0); // Start from top-left
+        // Stretch the 360x540 image to 540x960
+        draw_bmp_stretched_rotated("/images/dashboard.bmp", 0, 0, P_WIDTH, P_HEIGHT); 
         epd_draw_grayscale_image(epd_full_screen(), framebuffer);
         epd_poweroff();
         Serial.println(F("SYSTEM: Entering Screensaver Mode..."));

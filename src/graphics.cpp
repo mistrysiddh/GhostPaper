@@ -230,6 +230,44 @@ void writeln_scaled(const char *string, int x, int y, float scale, bool bold, ui
                     free(line);
                 }
             
-                f.close();
-            }
-            
+                    f.close();
+                }
+                
+                void draw_bmp_stretched_rotated(const char* path, int16_t x, int16_t y, int16_t targetW, int16_t targetH) {
+                    File f = SD.open(path);
+                    if (!f) return;
+                
+                    uint8_t header[54];
+                    if (f.read(header, 54) != 54) { f.close(); return; }
+                    if (header[0] != 'B' || header[1] != 'M') { f.close(); return; }
+                
+                    int32_t srcW = *(int32_t*)&header[18];
+                    int32_t srcH = *(int32_t*)&header[22];
+                    uint16_t bpp = *(uint16_t*)&header[28];
+                    uint32_t offset = *(uint32_t*)&header[10];
+                
+                    if (bpp != 1) { f.close(); return; } // Optimization: 1-bit support only for now
+                
+                    int srcRowSize = ((srcW + 31) / 32) * 4;
+                    size_t totalSize = srcRowSize * srcH;
+                    uint8_t* imgData = (uint8_t*)malloc(totalSize);
+                    if (!imgData) { f.close(); return; }
+                    
+                    f.seek(offset);
+                    f.read(imgData, totalSize);
+                    f.close();
+                
+                    // Nearest Neighbor scaling
+                    for (int ty = 0; ty < targetH; ty++) {
+                        int sy = (ty * srcH) / targetH;
+                        int rowIdx = (srcH - 1 - sy) * srcRowSize;
+                        for (int tx = 0; tx < targetW; tx++) {
+                            int sx = (tx * srcW) / targetW;
+                            uint8_t byte = imgData[rowIdx + (sx / 8)];
+                            uint8_t bit = (byte >> (7 - (sx % 8))) & 0x01;
+                            draw_pixel_rotated(x + tx, y + ty, bit ? 0xFF : 0x00);
+                        }
+                    }
+                    free(imgData);
+                }
+                

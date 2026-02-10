@@ -11,7 +11,6 @@ void OpdsClient::begin() {
     // WiFi assumed connected
 }
 
-// Internal helper to find first child matching name regardless of namespace
 XMLElement* findTag(XMLElement* parent, const char* name) {
     if (!parent) return NULL;
     XMLElement* child = parent->FirstChildElement();
@@ -23,6 +22,11 @@ XMLElement* findTag(XMLElement* parent, const char* name) {
     return NULL;
 }
 
+bool isOpdsFeed(const char* type) {
+    if (!type) return false;
+    return strstr(type, "application/atom+xml");
+}
+
 std::vector<OpdsEntry> OpdsClient::fetchCatalog(String url) {
     std::vector<OpdsEntry> entries;
     errorMsg = ""; 
@@ -32,24 +36,33 @@ std::vector<OpdsEntry> OpdsClient::fetchCatalog(String url) {
         return entries;
     }
 
+    delay(200);
     Serial.printf("OPDS: Fetching %s\n", url.c_str());
 
-    WiFiClientSecure secureClient;
-    secureClient.setInsecure();
-    WiFiClient client;
-    
     HTTPClient http;
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    http.setTimeout(15000); 
-    http.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"); 
+    http.setTimeout(20000); 
+    http.setUserAgent("Mozilla/5.0"); 
     
     const char * headerKeys[] = {"Location"};
     http.collectHeaders(headerKeys, 1);
 
-    bool beginSuccess = (url.startsWith("https")) ? http.begin(secureClient, url) : http.begin(client, url);
+    WiFiClient* client = NULL;
+    bool beginSuccess = false;
+    if (url.startsWith("https")) {
+        WiFiClientSecure *sClient = new WiFiClientSecure();
+        sClient->setInsecure();
+        client = sClient;
+        beginSuccess = http.begin(*sClient, url);
+    } else {
+        client = new WiFiClient();
+        beginSuccess = http.begin(*client, url);
+    }
 
     if (!beginSuccess) {
-        errorMsg = "Connection Setup Failed";
+        errorMsg = "HTTP Begin Failed";
+        http.end();
+        if (client) delete client;
         return entries;
     }
     
@@ -57,6 +70,7 @@ std::vector<OpdsEntry> OpdsClient::fetchCatalog(String url) {
     if (httpCode == 301 || httpCode == 302) {
         String newUrl = http.header("Location");
         http.end();
+        if (client) delete client;
         return fetchCatalog(newUrl); 
     }
 
@@ -67,7 +81,8 @@ std::vector<OpdsEntry> OpdsClient::fetchCatalog(String url) {
             XMLElement* root = doc.RootElement(); 
             if (root) {
                 XMLElement* entry = root->FirstChildElement();
-                while (entry) {
+                int count = 0;
+                while (entry && count < 50) { 
                     const char* name = entry->Name();
                     if (name && strstr(name, "entry")) {
                         OpdsEntry e;
@@ -76,118 +91,248 @@ std::vector<OpdsEntry> OpdsClient::fetchCatalog(String url) {
                         
                         while (child) {
                             const char* cName = child->Name();
-                            if (strstr(cName, "title")) e.title = child->GetText();
+                            if (strstr(cName, "title")) e.title = (child->GetText() ? child->GetText() : "");
                             else if (strstr(cName, "author")) {
                                 XMLElement* n = findTag(child, "name");
-                                if (n) e.author = n->GetText();
+                                if (n && n->GetText()) e.author = n->GetText();
                             }
                             else if (strstr(cName, "link")) {
                                 const char* rel = child->Attribute("rel");
                                 const char* type = child->Attribute("type");
                                 const char* href = child->Attribute("href");
                                 if (rel && href) {
-                                    // Match direct txt
                                     if ((strstr(rel, "acquisition") || strstr(rel, "open-access")) && 
                                         (type && strstr(type, "text/plain"))) {
                                         e.downloadUrl = href;
                                     }
-                                    // Gutenberg fallback:subsection link often leads to actual book page
-                                    if (strstr(rel, "subsection") && type && strstr(type, "atom+xml")) {
-                                        fallbackLink = href;
+                                    if (isOpdsFeed(type)) {
+                                        if (fallbackLink == "") fallbackLink = href;
                                     }
                                 }
                             }
                             child = child->NextSiblingElement();
                         }
                         
-                        // If no direct download, use the entry link as a resolver source
                         if (e.downloadUrl == "" && fallbackLink != "") e.downloadUrl = "resolve:" + fallbackLink;
 
                         if (e.title != "" && e.downloadUrl != "") {
                             if (e.downloadUrl.startsWith("/")) {
-                                int slash3 = url.indexOf('/', 8);
-                                String base = (slash3 > 0) ? url.substring(0, slash3) : url;
-                                e.downloadUrl = (e.downloadUrl.startsWith("resolve:/") ? "resolve:" + base + e.downloadUrl.substring(8) : base + e.downloadUrl);
+                                if (url.startsWith("http")) {
+                                    int slash3 = url.indexOf('/', 8);
+                                    String base = (slash3 > 0) ? url.substring(0, slash3) : url;
+                                    if (e.downloadUrl.startsWith("resolve:/")) {
+                                        e.downloadUrl = "resolve:" + base + e.downloadUrl.substring(8);
+                                    } else {
+                                        e.downloadUrl = base + e.downloadUrl;
+                                    }
+                                }
                             }
                             entries.push_back(e);
+                            count++;
                         }
                     }
                     entry = entry->NextSiblingElement();
                 }
             }
-        } else {
-            errorMsg = "XML Parse Error";
         }
     } else {
         errorMsg = "HTTP " + String(httpCode);
     }
+    
     http.end();
-    if (entries.empty() && errorMsg == "") errorMsg = "No entries found";
+    if (client) delete client;
     return entries;
 }
 
-String OpdsClient::resolveBookUrl(String bookOpdsUrl) {
-    if (WiFi.status() != WL_CONNECTED) return "";
-    
-    WiFiClientSecure secureClient; secureClient.setInsecure();
-    WiFiClient client;
-    HTTPClient http;
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    http.setUserAgent("Mozilla/5.0");
-    
-    if (bookOpdsUrl.startsWith("https")) http.begin(secureClient, bookOpdsUrl);
-    else http.begin(client, bookOpdsUrl);
-    
-    int code = http.GET();
-    if (code == 200) {
-        String payload = http.getString();
-        XMLDocument doc;
-        if (doc.Parse(payload.c_str()) == XML_SUCCESS) {
-            XMLElement* root = doc.RootElement();
-            // Look for first acquisition link ending in .txt or text/plain
-            XMLElement* entry = root->FirstChildElement();
-            while (entry) {
-                if (strstr(entry->Name(), "entry")) {
-                    XMLElement* link = entry->FirstChildElement();
-                    while (link) {
-                        if (strstr(link->Name(), "link")) {
+String OpdsClient::resolveBookUrl(String startUrl) {
+    String currentUrl = startUrl;
+    int depth = 0;
+
+    while (depth < 4) {
+        if (WiFi.status() != WL_CONNECTED) return "";
+        if (currentUrl.startsWith("/")) currentUrl = "https://www.gutenberg.org" + currentUrl;
+        
+        if (currentUrl.indexOf("gutenberg.org/ebooks/") != -1 && currentUrl.endsWith(".opds")) {
+            String guess = currentUrl;
+            guess.replace(".opds", ".txt.utf-8");
+            Serial.printf("OPDS: Gutenberg Heuristic Triggered -> %s\n", guess.c_str());
+            return guess;
+        }
+
+        Serial.printf("OPDS: Resolving %s (D%d)\n", currentUrl.c_str(), depth);
+        
+        String foundUrl = "";
+        String nextFeed = "";
+
+        {
+            HTTPClient http;
+            http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+            http.setTimeout(15000);
+            http.setUserAgent("Mozilla/5.0");
+            
+            WiFiClient* client = NULL;
+            if (currentUrl.startsWith("https")) {
+                WiFiClientSecure *sClient = new WiFiClientSecure();
+                sClient->setInsecure();
+                client = sClient;
+                http.begin(*sClient, currentUrl);
+            } else {
+                client = new WiFiClient();
+                http.begin(*client, currentUrl);
+            }
+            
+            int code = http.GET();
+            if (code == 200) {
+                if (ESP.getFreeHeap() > 40000) {
+                    String payload = http.getString();
+                    XMLDocument doc;
+                    if (doc.Parse(payload.c_str()) == XML_SUCCESS) {
+                        XMLElement* root = doc.RootElement();
+                        auto checkLink = [&](XMLElement* link) {
                             const char* href = link->Attribute("href");
                             const char* type = link->Attribute("type");
-                            if (href && (strstr(href, ".txt.utf-8") || (type && strstr(type, "text/plain")))) {
-                                String result = href;
-                                http.end(); return result;
+                            const char* rel = link->Attribute("rel");
+                            if (href) {
+                                bool isText = (type && strstr(type, "text/plain")) || strstr(href, ".txt");
+                                if (isText) {
+                                    if (foundUrl == "" || strstr(href, "utf-8")) {
+                                        foundUrl = String(href);
+                                        if (foundUrl.startsWith("/")) foundUrl = "https://www.gutenberg.org" + foundUrl;
+                                    }
+                                }
+                                if (foundUrl == "" && isOpdsFeed(type) && rel) {
+                                    bool isNav = strstr(rel, "subsection") || strstr(rel, "acquisition") || strstr(rel, "alternate");
+                                    bool isRelated = strstr(rel, "related") || strstr(rel, "author") || strstr(rel, "bookshelf");
+                                    if (isNav && !isRelated) {
+                                        String h = String(href);
+                                        if (h != currentUrl && h.indexOf("bookshelf") == -1) {
+                                            nextFeed = h;
+                                            if (nextFeed.startsWith("/")) nextFeed = "https://www.gutenberg.org" + nextFeed;
+                                        }
+                                    }
+                                }
                             }
+                        };
+
+                        XMLElement* rootChild = root ? root->FirstChildElement() : NULL;
+                        while(rootChild) {
+                            if (rootChild->Name() && strstr(rootChild->Name(), "link")) checkLink(rootChild);
+                            rootChild = rootChild->NextSiblingElement();
                         }
-                        link = link->NextSiblingElement();
+                        XMLElement* entry = root ? root->FirstChildElement() : NULL;
+                        while (entry) {
+                            if (entry->Name() && strstr(entry->Name(), "entry")) {
+                                XMLElement* child = entry->FirstChildElement();
+                                while (child) {
+                                    if (child->Name() && strstr(child->Name(), "link")) checkLink(child);
+                                    child = child->NextSiblingElement();
+                                }
+                            }
+                            entry = entry->NextSiblingElement();
+                        }
                     }
                 }
-                entry = entry->NextSiblingElement();
             }
+            http.end();
+            if (client) delete client;
         }
+
+        if (foundUrl != "") return foundUrl;
+        if (nextFeed != "" && nextFeed != currentUrl) {
+            currentUrl = nextFeed;
+            depth++;
+        } else break;
     }
-    http.end();
     return "";
 }
 
-bool OpdsClient::downloadBook(String url, String targetPath) {
-    if (WiFi.status() != WL_CONNECTED) return false;
-    WiFiClientSecure secureClient; secureClient.setInsecure();
-    WiFiClient client;
-    HTTPClient http;
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    bool beginSuccess = (url.startsWith("https")) ? http.begin(secureClient, url) : http.begin(client, url);
-    if (!beginSuccess) return false;
-    
-    int httpCode = http.GET();
-    bool success = false;
-    if (httpCode == HTTP_CODE_OK) {
-        File f = SD.open(targetPath, FILE_WRITE);
-        if (f) {
-            http.writeToStream(&f);
-            f.close();
-            success = true;
+bool OpdsClient::downloadBook(String startUrl, String targetPath, std::function<void(int)> progressCallback) {
+    String currentUrl = startUrl;
+    int redirects = 0;
+
+    while (redirects < 6) {
+        if (WiFi.status() != WL_CONNECTED) return false;
+        if (currentUrl.startsWith("/")) currentUrl = "https://www.gutenberg.org" + currentUrl;
+
+        Serial.printf("OPDS: Downloading %s (R%d)\n", currentUrl.c_str(), redirects);
+        
+        delay(100);
+
+        HTTPClient http;
+        // Stack-allocated clients for safety
+        WiFiClientSecure secureClient;
+        WiFiClient client;
+        secureClient.setInsecure();
+
+        http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+        http.setTimeout(30000);
+        http.setUserAgent("Mozilla/5.0");
+        const char * headerKeys[] = {"Location"};
+        http.collectHeaders(headerKeys, 1);
+
+        if (currentUrl.startsWith("https")) {
+            http.begin(secureClient, currentUrl);
+        } else {
+            http.begin(client, currentUrl);
         }
+
+        int httpCode = http.GET();
+        Serial.printf("OPDS: HTTP %d\n", httpCode);
+
+        if (httpCode == 301 || httpCode == 302) {
+            String nextUrl = http.header("Location");
+            http.end(); 
+            
+            if (nextUrl == "" || nextUrl == currentUrl) return false;
+            currentUrl = nextUrl;
+            redirects++;
+            continue;
+        }
+
+        bool success = false;
+        if (httpCode == 200) {
+            File f = SD.open(targetPath, FILE_WRITE);
+            if (f) {
+                uint8_t buff[1024] = { 0 };
+                int len = http.getSize();
+                int totalRead = 0;
+                int lastProgress = -1;
+                
+                WiFiClient *stream = http.getStreamPtr();
+                
+                while(http.connected() && (len > 0 || len == -1)) {
+                    size_t size = stream->available();
+                    if(size) {
+                        int c = stream->readBytes(buff, ((size > sizeof(buff)) ? sizeof(buff) : size));
+                        f.write(buff, c);
+                        if(len > 0) len -= c;
+                        totalRead += c;
+                        
+                        if (progressCallback && len > -1) {
+                            // Calculate total expected based on original len + what we read if len decrements
+                            // Actually len decrements in this loop logic.
+                            // Better: track total size separately
+                            int originalSize = http.getSize();
+                            if (originalSize > 0) {
+                                int pct = (totalRead * 100) / originalSize;
+                                if (pct != lastProgress && pct % 5 == 0) { // Update every 5%
+                                    progressCallback(pct);
+                                    lastProgress = pct;
+                                }
+                            }
+                        }
+                    }
+                    delay(1);
+                }
+                
+                f.close();
+                Serial.printf("OPDS: Written %d bytes\n", totalRead);
+                success = (totalRead > 0);
+            }
+        }
+        
+        http.end();
+        return success;
     }
-    http.end();
-    return success;
+    return false;
 }

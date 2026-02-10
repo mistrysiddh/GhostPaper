@@ -38,6 +38,15 @@ bool touchReleased = true; // Guard for double clicks
 RTC_DATA_ATTR bool touchEnabled = true;
 Button2 btn1(BUTTON_1);
 
+// --- WiFi Setup State ---
+std::vector<String> foundSSIDs;
+String selectedSSID = "";
+String typingPassword = "";
+bool isScanning = false;
+bool isTypingPass = false;
+bool isShifted = false;
+bool isSymbols = false; // New variable for symbol mode // New variable for keyboard state
+
 // --- Visual Feedback Functions ---
 
 void showTapFeedback(int x, int y) {
@@ -70,8 +79,8 @@ void showTapFeedback(int x, int y) {
     Rect_t area = {
         .x = (int32_t)(960 - 1 - (y + size/2)),
         .y = (int32_t)(x - size/2),
-        .width = (uint32_t)size,
-        .height = (uint32_t)size
+        .width = (int32_t)size,
+        .height = (int32_t)size
     };
 
     epd_poweron();
@@ -83,8 +92,8 @@ void showTapFeedback(int x, int y) {
     Rect_t area = {
         .x = (int32_t)(960 - 1 - (y + size/2)),
         .y = (int32_t)(x - size/2),
-        .width = (uint32_t)size,
-        .height = (uint32_t)size
+        .width = (int32_t)size,
+        .height = (int32_t)size
     };
     epd_poweron();
     epd_push_pixels(area, 20, 0); // Quick darken
@@ -226,15 +235,15 @@ void updateLibraryMenu(bool showMenu) {
         draw_rect_rotated(menuX, menuY, menuW, menuH, COL_BLACK);
         draw_rect_rotated(menuX + 2, menuY + 2, menuW - 4, menuH - 4, COL_BLACK);
 
-        int bh = menuH / 5;
+        int bh = menuH / 6;
         int vCenterOffset = (bh / 2) + 15;
-        const char* labels[] = {"NEXT PAGE", "PREV PAGE", "REFRESH", "SYNC", "BACK"};
+        const char* labels[] = {"NEXT PAGE", "PREV PAGE", "REFRESH", "SYNC", "WIFI", "BACK"};
         
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 6; i++) {
             float scale = 0.8;
             int tw = get_text_width_scaled(labels[i], scale);
             writeln_scaled(labels[i], menuX + (menuW - tw) / 2, menuY + (i * bh) + vCenterOffset, scale, true, COL_BLACK);
-            if (i < 4) draw_line_rotated(menuX + 30, menuY + (i + 1) * bh, menuX + menuW - 30, menuY + (i + 1) * bh, COL_LIGHT);
+            if (i < 5) draw_line_rotated(menuX + 30, menuY + (i + 1) * bh, menuX + menuW - 30, menuY + (i + 1) * bh, COL_LIGHT);
         }
         epd_draw_grayscale_image(epd_full_screen(), framebuffer);
         epd_poweroff();
@@ -420,8 +429,8 @@ void handlePinTouch(int x, int y) {
     Rect_t btnArea = {
         .x = (int32_t)(960 - 1 - (gridStartY + row * (kh + kGapY) + kh)),
         .y = (int32_t)(gridStartX + col * (kw + kGapX)),
-        .width = (uint32_t)kh,
-        .height = (uint32_t)kw
+        .width = (int32_t)kh,
+        .height = (int32_t)kw
     };
     epd_poweron();
     epd_push_pixels(btnArea, 30, 0); // Quick black flash
@@ -430,8 +439,8 @@ void handlePinTouch(int x, int y) {
     Rect_t masterArea = {
         .x = (int32_t)(960 - 1 - (cardY + 820)), 
         .y = (int32_t)cardX,
-        .width = (uint32_t)820,
-        .height = (uint32_t)cardW
+        .width = (int32_t)820,
+        .height = (int32_t)cardW
     };
     for (int w = 0; w < 2; w++) epd_push_pixels(masterArea, 50, 1);
     epd_poweroff();
@@ -648,6 +657,10 @@ void handleTouchAction(int x, int y) {
     }
     if (appState == STATE_STORE) {
         handleStoreTouch(x, y);
+        return;
+    }
+    if (appState == STATE_WIFI_SETUP) {
+        handleWiFiTouch(x, y);
         return;
     }
     if (appState == STATE_PRIVACY || appState == STATE_SET_PIN) {
@@ -921,7 +934,7 @@ void handleTouchAction(int x, int y) {
         int menuH = boxBottom - boxTop;
 
         if (x >= menuX && x <= menuX + menuW && y >= menuY && y <= menuY + menuH) {
-            int bh = menuH / 5;
+            int bh = menuH / 6;
             int localY = y - menuY;
             int slot = localY / bh;
             int totalPages = (filteredBooks.size() + SHELF_BOOKS_PER_PAGE - 1) / SHELF_BOOKS_PER_PAGE;
@@ -952,6 +965,11 @@ void handleTouchAction(int x, int y) {
             }
             else if (slot == 3) { // SYNC
                 startGhostDrop();
+                return;
+            }
+            else if (slot == 4) { // WIFI
+                appState = STATE_WIFI_SETUP;
+                startWiFiScan();
                 return;
             }
             else { // BACK
@@ -1165,12 +1183,17 @@ void setup() {
 
     // PIN and State initialization
     activePin = prefs.getString("saved_pin", "");
+    String savedSSID = prefs.getString("wifi_ssid", "");
     
     // Check if we woke up from deep sleep or if it's a fresh boot
     if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED) {
         if (activePin == "") {
             appState = STATE_SET_PIN;
             Serial.println(F("DEBUG: Fresh Boot - No PIN found. Starting SETUP."));
+        } else if (savedSSID == "" && String(WIFI_SSID_1) == "YOUR_SSID") {
+            // No credentials in NVS and no valid credentials in config.h
+            appState = STATE_WIFI_SETUP;
+            Serial.println(F("DEBUG: Fresh Boot - No WiFi found. Starting SETUP."));
         } else {
             appState = STATE_PRIVACY;
             Serial.println(F("DEBUG: Fresh Boot - PIN found. Starting LOCK."));
@@ -1181,6 +1204,8 @@ void setup() {
 
     if (appState == STATE_PRIVACY || appState == STATE_SET_PIN) {
         drawPinPad(appState == STATE_SET_PIN);
+    } else if (appState == STATE_WIFI_SETUP) {
+        startWiFiScan();
     } else if (appState == STATE_LIBRARY) {
         updateLibrary();
     } else if (appState == STATE_READING) {
@@ -1245,6 +1270,305 @@ void loop() {
             }
         } else {
             touchReleased = true; // Reset when no touch detected
+        }
+    }
+}
+
+// --- WiFi Setup UI Logic ---
+
+void partialUpdateRegion(int x, int y, int w, int h) {
+    Rect_t area = {
+        .x = (int32_t)(960 - 1 - (y + h)),
+        .y = (int32_t)x,
+        .width = (int32_t)h,
+        .height = (int32_t)w
+    };
+    // 3. THE "PHYSICAL WASH" (To clear ghosting before redraw)
+    for (int i = 0; i < 2; i++) epd_push_pixels(area, 50, 1);
+    epd_draw_grayscale_image(area, framebuffer);
+}
+
+void partialUpdateWiFiPassword() {
+    int boxX = 20, boxY = 150, boxW = P_WIDTH - 40, boxH = 50;
+    fill_rect_rotated(boxX, boxY, boxW, boxH, COL_WHITE);
+    draw_rect_rotated(boxX, boxY, boxW, boxH, COL_BLACK);
+    String masked = "";
+    for(int i=0; i<(int)typingPassword.length(); i++) masked += "*";
+    writeln_scaled(masked.c_str(), 35, boxY + 35, 0.6, true, COL_BLACK);
+    
+    // Using partialUpdateRegion which now handles the physical wash
+    partialUpdateRegion(boxX, boxY, boxW, boxH);
+}
+
+void startWiFiScan() {
+    isScanning = true;
+    updateWiFiSetup(false);
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
+    int n = WiFi.scanNetworks();
+    foundSSIDs.clear();
+    for (int i = 0; i < n && i < 8; ++i) foundSSIDs.push_back(WiFi.SSID(i));
+    isScanning = false;
+    updateWiFiSetup(false);
+}
+
+void updateWiFiSetup(bool partial) {
+    epd_poweron();
+    if (!partial) {
+        // 1. FULL SCREEN REFRESH PATTERN
+        epd_clear();
+        memset(framebuffer, COL_WHITE, L_WIDTH * L_HEIGHT / 2);
+        fill_rect_rotated(0, 0, P_WIDTH, 80, COL_BLACK);
+        writeln_scaled("WiFi Setup", 25, 50, 0.8, true, COL_WHITE);
+        
+        // Back Button
+        int btnW = 80, btnH = 40, btnX = P_WIDTH - 100, btnY = 20;
+        draw_rounded_rect(btnX, btnY, btnW, btnH, 5, COL_WHITE);
+        int tw = get_text_width_scaled("BACK", 0.4);
+        writeln_scaled("BACK", btnX + (btnW - tw) / 2, btnY + 28, 0.4, true, COL_WHITE);
+    }
+
+    if (isScanning) {
+        writeln_scaled("Scanning for networks...", 100, 400, 0.6, true, COL_BLACK);
+    } else if (!isTypingPass) {
+        writeln_scaled("Select your network:", 25, 120, 0.5, true, COL_BLACK);
+        for (int i = 0; i < (int)foundSSIDs.size(); i++) {
+            int y = 160 + i * 70;
+            draw_rect_rotated(20, y, P_WIDTH - 40, 60, COL_DARK);
+            writeln_scaled(foundSSIDs[i].c_str(), 40, y + 40, 0.5, false, COL_BLACK);
+        }
+        int rbtnW = 130, rbtnH = 45, rbtnX = P_WIDTH - 150, rbtnY = 95;
+        draw_rounded_rect(rbtnX, rbtnY, rbtnW, rbtnH, 5, COL_BLACK);
+        int rtw = get_text_width_scaled("RESCAN", 0.4);
+        writeln_scaled("RESCAN", rbtnX + (rbtnW - rtw) / 2, rbtnY + 31, 0.4, true, COL_BLACK);
+    } else {
+        if (!partial) {
+            writeln_scaled("Enter Password:", 25, 110, 0.5, false, COL_BLACK);
+            writeln_scaled(selectedSSID.c_str(), 25, 140, 0.5, true, COL_GRAY);
+            draw_rect_rotated(20, 150, P_WIDTH - 40, 50, COL_BLACK);
+            String masked = "";
+            for(int i=0; i<(int)typingPassword.length(); i++) masked += "*";
+            writeln_scaled(masked.c_str(), 35, 185, 0.6, true, COL_BLACK);
+            
+            // Back to List Button
+            int bbtnW = 80, bbtnH = 40, bbtnX = P_WIDTH - 100, bbtnY = 95;
+            draw_rounded_rect(bbtnX, bbtnY, bbtnW, bbtnH, 5, COL_BLACK);
+            int btw = get_text_width_scaled("BACK", 0.4);
+            writeln_scaled("BACK", bbtnX + (bbtnW - btw) / 2, bbtnY + 28, 0.4, true, COL_BLACK);
+        }
+
+        const char* r1[] = {"1","2","3","4","5","6","7","8","9","0"};
+        const char* r1S[] = {"!","@","#","$","%","^","&","*","(",")"};
+        const char* r2[] = {"q","w","e","r","t","y","u","i","o","p"};
+        const char* r2S[] = {"-","=","[","]","\\",";","'",",",".","/"};
+        const char* r3[] = {"a","s","d","f","g","h","j","k","l"};
+        const char* r3S[] = {"{","}","|",":","\"","<",">","?","_"};
+        const char* r4[] = {"z","x","c","v","b","n","m"};
+        const char* r4S[] = {"+","~","`"," "," "," "," "};
+
+        int startY = 220;
+        int keyH = 55; int gap = 8;
+        int keyW = (P_WIDTH - 40 - (9 * gap)) / 10;
+        
+        if (partial) fill_rect_rotated(0, 220, P_WIDTH, 350, COL_WHITE);
+
+        for (int i=0; i<10; i++) {
+            int x = 20 + i * (keyW + gap);
+            draw_rounded_rect(x, startY, keyW, keyH, 5, COL_BLACK);
+            const char* label = isSymbols ? r1S[i] : r1[i];
+            int tw = get_text_width_scaled(label, 0.5);
+            writeln_scaled(label, x + (keyW - tw) / 2, startY + 38, 0.5, true, COL_BLACK);
+        }
+        startY += keyH + gap;
+        for (int i=0; i<10; i++) {
+            int x = 20 + i * (keyW + gap);
+            draw_rounded_rect(x, startY, keyW, keyH, 5, COL_BLACK);
+            String label = isSymbols ? r2S[i] : (isShifted ? String((char)toupper(r2[i][0])) : r2[i]);
+            int tw = get_text_width_scaled(label.c_str(), 0.5);
+            writeln_scaled(label.c_str(), x + (keyW - tw) / 2, startY + 38, 0.5, true, COL_BLACK);
+        }
+        startY += keyH + gap;
+        int indent = keyW / 2;
+        for (int i=0; i<9; i++) {
+            int x = 20 + indent + i * (keyW + gap);
+            draw_rounded_rect(x, startY, keyW, keyH, 5, COL_BLACK);
+            String label = isSymbols ? r3S[i] : (isShifted ? String((char)toupper(r3[i][0])) : r3[i]);
+            int tw = get_text_width_scaled(label.c_str(), 0.5);
+            writeln_scaled(label.c_str(), x + (keyW - tw) / 2, startY + 38, 0.5, true, COL_BLACK);
+        }
+        startY += keyH + gap;
+        int shW = keyW * 1.5;
+        draw_rounded_rect(20, startY, shW, keyH, 5, isShifted ? COL_BLACK : COL_GRAY);
+        if (isShifted && !isSymbols) fill_rect_rotated(20, startY, shW, keyH, COL_BLACK);
+        const char* shLabel = isSymbols ? "ABC" : "SH";
+        int shtw = get_text_width_scaled(shLabel, 0.4);
+        writeln_scaled(shLabel, 20 + (shW - shtw) / 2, startY + 38, 0.4, true, (isShifted && !isSymbols) ? COL_WHITE : COL_BLACK);
+        
+        int xStart = 20 + shW + gap;
+        for (int i=0; i<7; i++) { 
+            int x = xStart + i * (keyW + gap);
+            draw_rounded_rect(x, startY, keyW, keyH, 5, COL_BLACK);
+            String label = isSymbols ? r4S[i] : (isShifted ? String((char)toupper(r4[i][0])) : r4[i]);
+            if (label != " ") {
+                int tw = get_text_width_scaled(label.c_str(), 0.5);
+                writeln_scaled(label.c_str(), x + (keyW - tw) / 2, startY + 38, 0.5, true, COL_BLACK);
+            }
+        }
+        int delX = xStart + 7 * (keyW + gap);
+        int delW = P_WIDTH - 20 - delX;
+        draw_rounded_rect(delX, startY, delW, keyH, 5, COL_BLACK);
+        int dtw = get_text_width_scaled("DEL", 0.4);
+        writeln_scaled("DEL", delX + (delW - dtw) / 2, startY + 38, 0.4, true, COL_BLACK);
+
+        startY += keyH + gap;
+        int symW = 100;
+        draw_rounded_rect(20, startY, symW, keyH, 5, isSymbols ? COL_BLACK : COL_GRAY);
+        if (isSymbols) fill_rect_rotated(20, startY, symW, keyH, COL_BLACK);
+        const char* symLabel = isSymbols ? "123" : "SYM";
+        int symtw = get_text_width_scaled(symLabel, 0.4);
+        writeln_scaled(symLabel, 20 + (symW - symtw) / 2, startY + 38, 0.4, true, isSymbols ? COL_WHITE : COL_BLACK);
+        
+        int spcW = 260;
+        draw_rounded_rect(130, startY, spcW, keyH, 5, COL_BLACK);
+        int spctw = get_text_width_scaled("SPACE", 0.4);
+        writeln_scaled("SPACE", 130 + (spcW - spctw) / 2, startY + 38, 0.4, true, COL_BLACK);
+        
+        int okW = 120;
+        draw_rounded_rect(400, startY, okW, keyH, 5, COL_BLACK);
+        int oktw = get_text_width_scaled("OK", 0.4);
+        writeln_scaled("OK", 400 + (okW - oktw) / 2, startY + 38, 0.4, true, COL_BLACK);
+    }
+
+    if (partial) {
+        // partialUpdateRegion now handles poweron/off and wash
+        partialUpdateRegion(0, 220, P_WIDTH, 350);
+    } else {
+        epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+    }
+    epd_poweroff();
+}
+
+void handleWiFiTouch(int x, int y) {
+    if (isScanning) return;
+
+    // Helper for instant feedback
+    auto feedback = [&](int fx, int fy, int fw, int fh) {
+        Rect_t area = { .x = (int32_t)(960 - 1 - (fy + fh)), .y = (int32_t)fx, .width = (int32_t)fh, .height = (int32_t)fw };
+        epd_poweron(); epd_push_pixels(area, 30, 0); epd_poweroff();
+    };
+
+    // Header Back Button
+    if (y > 10 && y < 70 && x > P_WIDTH - 110) {
+        feedback(P_WIDTH - 100, 20, 80, 40);
+        appState = STATE_LIBRARY; showTransitionEffect(); updateLibrary(); return;
+    }
+
+    if (!isTypingPass) {
+        if (y > 95 && y < 140 && x > P_WIDTH - 150) { 
+            feedback(P_WIDTH - 150, 95, 130, 45); // RESCAN button
+            startWiFiScan(); return; 
+        }
+        for (int i = 0; i < (int)foundSSIDs.size(); i++) {
+            int iy = 160 + i * 70;
+            if (y > iy && y < iy + 60) {
+                feedback(20, iy, P_WIDTH - 40, 60); // SSID row
+                selectedSSID = foundSSIDs[i]; typingPassword = "";
+                isTypingPass = true; isShifted = false; isSymbols = false;
+                updateWiFiSetup(false); return;
+            }
+        }
+    } else {
+        // Back to list button when typing password
+        if (y > 90 && y < 140 && x > P_WIDTH - 110) {
+            feedback(P_WIDTH - 100, 95, 80, 40);
+            isTypingPass = false; updateWiFiSetup(false); return;
+        }
+
+        int startY = 220; int keyH = 55; int gap = 8;
+        int keyW = (P_WIDTH - 40 - (9 * gap)) / 10;
+
+        auto keyFeedback = [&](int kx, int ky, int kw_val) {
+            Rect_t btn = { .x = (int32_t)(960 - 1 - (ky + keyH)), .y = (int32_t)kx, .width = (int32_t)keyH, .height = (int32_t)kw_val };
+            epd_poweron(); epd_push_pixels(btn, 30, 0); epd_poweroff();
+        };
+
+        if (y >= startY && y < startY + keyH) {
+            int col = (x - 20) / (keyW + gap);
+            if (col >= 0 && col < 10) {
+                int kx = 20 + col * (keyW + gap);
+                keyFeedback(kx, startY, keyW);
+                const char* r1[] = {"1","2","3","4","5","6","7","8","9","0"};
+                const char* r1S[] = {"!","@","#","$","%","^","&","*","(",")"};
+                typingPassword += isSymbols ? r1S[col] : r1[col];
+                partialUpdateWiFiPassword();
+            }
+            return;
+        }
+        startY += keyH + gap;
+        if (y >= startY && y < startY + keyH) {
+            int col = (x - 20) / (keyW + gap);
+            if (col >= 0 && col < 10) {
+                int kx = 20 + col * (keyW + gap);
+                keyFeedback(kx, startY, keyW);
+                const char* r2[] = {"q","w","e","r","t","y","u","i","o","p"};
+                const char* r2S[] = {"-","=","[","]","\\",";","'",",",".","/"};
+                if (isSymbols) typingPassword += r2S[col];
+                else typingPassword += (isShifted ? (char)toupper(r2[col][0]) : r2[col][0]);
+                partialUpdateWiFiPassword();
+            }
+            return;
+        }
+        startY += keyH + gap;
+        int indent = keyW / 2;
+        if (y >= startY && y < startY + keyH) {
+            int col = (x - (20 + indent)) / (keyW + gap);
+            if (col >= 0 && col < 9) {
+                int kx = 20 + indent + col * (keyW + gap);
+                keyFeedback(kx, startY, keyW);
+                const char* r3[] = {"a","s","d","f","g","h","j","k","l"};
+                const char* r3S[] = {"{","}","|",":","\"","<",">","?","_"};
+                if (isSymbols) typingPassword += r3S[col];
+                else typingPassword += (isShifted ? (char)toupper(r3[col][0]) : r3[col][0]);
+                partialUpdateWiFiPassword();
+            }
+            return;
+        }
+        startY += keyH + gap;
+        if (y >= startY && y < startY + keyH) {
+            if (x >= 20 && x < 20 + keyW * 1.5) {
+                keyFeedback(20, startY, keyW * 1.5);
+                if (isSymbols) isSymbols = false; else isShifted = !isShifted;
+                updateWiFiSetup(true); return;
+            }
+            int xStart = 20 + (keyW * 1.5) + gap;
+            int delX = xStart + 7 * (keyW + gap);
+            if (x >= delX) {
+                keyFeedback(delX, startY, P_WIDTH - 20 - delX);
+                if (typingPassword.length() > 0) typingPassword.remove(typingPassword.length() - 1);
+                partialUpdateWiFiPassword(); return;
+            }
+            int col = (x - xStart) / (keyW + gap);
+            if (col >= 0 && col < 7) {
+                int kx = xStart + col * (keyW + gap);
+                keyFeedback(kx, startY, keyW);
+                const char* r4[] = {"z","x","c","v","b","n","m"};
+                const char* r4S[] = {"+","~","`"," "," "," "," "};
+                if (isSymbols) { if (String(r4S[col]) != " ") typingPassword += r4S[col]; }
+                else typingPassword += (isShifted ? (char)toupper(r4[col][0]) : r4[col][0]);
+                partialUpdateWiFiPassword();
+            }
+            return;
+        }
+        startY += keyH + gap;
+        if (y >= startY && y < startY + keyH) {
+            if (x < 120) { keyFeedback(20, startY, 100); isSymbols = !isSymbols; updateWiFiSetup(true); }
+            else if (x > 400) {
+                keyFeedback(400, startY, 120);
+                prefs.putString("wifi_ssid", selectedSSID);
+                prefs.putString("wifi_pass", typingPassword);
+                appState = STATE_LIBRARY; showTransitionEffect(); updateLibrary();
+            } else { keyFeedback(130, startY, 260); typingPassword += " "; partialUpdateWiFiPassword(); }
+            return;
         }
     }
 }

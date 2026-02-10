@@ -11,7 +11,7 @@
 #include "config.h"
 
 // --- State ---
-enum AppState { STATE_SPLASH, STATE_PRIVACY, STATE_SET_PIN, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS, STATE_READER_OPTIONS, STATE_LIBRARY_OPTIONS, STATE_GHOSTDROP, STATE_STORE };
+enum AppState { STATE_SPLASH, STATE_PRIVACY, STATE_SET_PIN, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS, STATE_READER_OPTIONS, STATE_LIBRARY_OPTIONS, STATE_GHOSTDROP, STATE_STORE, STATE_WIFI_SETUP };
 enum LibFilter { FILTER_ALL, FILTER_NEW, FILTER_READING, FILTER_FINISHED, FILTER_STORE };
 
 extern RTC_DATA_ATTR AppState appState;
@@ -62,6 +62,12 @@ void startGhostDrop();
 void stopGhostDrop();
 void handleGhostDropTouch(int x, int y);
 void drawGhostDropUI(String status);
+
+// --- WiFi Setup Prototypes ---
+void updateWiFiSetup(bool partial = false);
+void handleWiFiTouch(int x, int y);
+void startWiFiScan();
+void partialUpdateRegion(int x, int y, int w, int h);
 
 // --- Graphics Prototypes ---
 void draw_pixel_rotated(int16_t x, int16_t y, uint8_t gray);

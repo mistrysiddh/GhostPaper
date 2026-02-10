@@ -9,7 +9,7 @@ void partialUpdateHeader() {
         .x = (int32_t)(960 - 1 - 70),
         .y = 0,
         .width = 70,
-        .height = (uint32_t)P_WIDTH
+        .height = (int32_t)P_WIDTH
     };
 
     epd_poweron();
@@ -49,7 +49,7 @@ void partialUpdateHeader() {
         .x = 0, // Starts at bottom in physical landscape
         .y = 0,
         .width = 130,
-        .height = (uint32_t)P_WIDTH
+        .height = (int32_t)P_WIDTH
     };
 
     // Redraw Footer Base
@@ -166,8 +166,8 @@ void updateReader(bool partial_refresh) {
             Rect_t textCardArea = {
                 .x = (int32_t)(960 - 1 - (boxTop + boxH)),
                 .y = (int32_t)boxMargin,
-                .width = (uint32_t)boxH,
-                .height = (uint32_t)boxW
+                .width = (int32_t)boxH,
+                .height = (int32_t)boxW
             };
             for (int i = 0; i < 3; i++) {
                 epd_push_pixels(textCardArea, 50, 1);

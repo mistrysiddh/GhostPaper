@@ -157,7 +157,7 @@ void partialUpdateLibraryHeader() {
         .x = (int32_t)(960 - 1 - 90),
         .y = 0,
         .width = 90,
-        .height = (uint32_t)P_WIDTH
+        .height = (int32_t)P_WIDTH
     };
 
     epd_poweron();

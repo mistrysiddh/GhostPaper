@@ -508,8 +508,8 @@ void goToDeepSleep() {
     // 1. Display Screensaver
     epd_poweron();
     memset(framebuffer, 0xFF, L_WIDTH * L_HEIGHT / 2); // Clear buffer to white
-    // Draw the BMP centered (assuming 540x960 or smaller)
-    draw_bmp_rotated("/images/dashboard.bmp", 0, 0); 
+    // Center the 360x540 image on the 540x960 screen
+    draw_bmp_rotated("/images/dashboard.bmp", 90, 210); 
     epd_draw_grayscale_image(epd_full_screen(), framebuffer);
     delay(500); // Give E-ink time to settle
 

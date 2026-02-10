@@ -187,31 +187,49 @@ void writeln_scaled(const char *string, int x, int y, float scale, bool bold, ui
         
             int32_t width = *(int32_t*)&header[18];
             int32_t height = *(int32_t*)&header[22];
-            uint16_t bpp = *(uint16_t*)&header[28];
-            uint32_t offset = *(uint32_t*)&header[10];
-        
-            if (bpp != 24) { f.close(); return; } // Only 24-bit supported for now
-        
-            f.seek(offset);
-        
-            int rowSize = (width * 3 + 3) & ~3;
-            uint8_t* line = (uint8_t*)malloc(rowSize);
-            if (!line) { f.close(); return; }
-        
-            for (int i = 0; i < height; i++) {
-                f.read(line, rowSize);
-                int py = height - 1 - i; // BMP is bottom-up
-                for (int px = 0; px < width; px++) {
-                    uint8_t b = line[px * 3];
-                    uint8_t g = line[px * 3 + 1];
-                    uint8_t r = line[px * 3 + 2];
-                    // Simple grayscale conversion: (R+G+B)/3
-                    uint8_t gray = (uint8_t)((r + g + b) / 3);
-                    draw_pixel_rotated(x + px, y + py, gray);
+                uint16_t bpp = *(uint16_t*)&header[28];
+                uint32_t offset = *(uint32_t*)&header[10];
+            
+                if (bpp != 24 && bpp != 1) { f.close(); return; } 
+            
+                f.seek(offset);
+            
+                if (bpp == 24) {
+                    int rowSize = (width * 3 + 3) & ~3;
+                    uint8_t* line = (uint8_t*)malloc(rowSize);
+                    if (!line) { f.close(); return; }
+            
+                    for (int i = 0; i < height; i++) {
+                        f.read(line, rowSize);
+                        int py = height - 1 - i; 
+                        for (int px = 0; px < width; px++) {
+                            uint8_t b = line[px * 3];
+                            uint8_t g = line[px * 3 + 1];
+                            uint8_t r = line[px * 3 + 2];
+                            uint8_t gray = (uint8_t)((r + g + b) / 3);
+                            draw_pixel_rotated(x + px, y + py, gray);
+                        }
+                    }
+                    free(line);
+                } else if (bpp == 1) {
+                    int rowSize = ((width + 31) / 32) * 4;
+                    uint8_t* line = (uint8_t*)malloc(rowSize);
+                    if (!line) { f.close(); return; }
+            
+                    for (int i = 0; i < height; i++) {
+                        f.read(line, rowSize);
+                        int py = height - 1 - i;
+                        for (int px = 0; px < width; px++) {
+                            uint8_t byte = line[px / 8];
+                            uint8_t bit = (byte >> (7 - (px % 8))) & 0x01;
+                            // 1 is usually white, 0 is black in monochrome BMPs
+                            uint8_t gray = bit ? 0xFF : 0x00;
+                            draw_pixel_rotated(x + px, y + py, gray);
+                        }
+                    }
+                    free(line);
                 }
+            
+                f.close();
             }
-        
-            free(line);
-            f.close();
-        }
-        
+            

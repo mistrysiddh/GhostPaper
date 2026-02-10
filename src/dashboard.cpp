@@ -16,28 +16,27 @@ void drawHorizontalDivider(int y) {
     draw_line_rotated(40, y, P_WIDTH - 40, y, COL_BLACK);
 }
 
-void drawWallpaper() {
-    // Elegant frame around the entire screen
-    draw_rect_rotated(10, 10, P_WIDTH - 20, P_HEIGHT - 20, 0xF0);
-    
-    // Vertical "Column" accents for the Newspaper feel
-    draw_line_rotated(35, 100, 35, P_HEIGHT - 100, 0xF2);
-    draw_line_rotated(P_WIDTH - 35, 100, P_WIDTH - 35, P_HEIGHT - 100, 0xF2);
-}
-
 void drawHeroHeader() {
     // 1. Large Minimal Clock
     String timeS = getTimeString();
     bool oldSerif = useSerif;
     useSerif = false; 
-    int timeW = get_text_width_scaled(timeS.c_str(), 2.2);
-    writeln_scaled(timeS.c_str(), (P_WIDTH - timeW)/2, 90, 2.2, true, COL_BLACK);
+    int timeW = get_text_width_scaled(timeS.c_str(), 2.4);
+    writeln_scaled(timeS.c_str(), (P_WIDTH - timeW)/2, 100, 2.4, true, COL_BLACK);
     
-    // 2. Date
+    // 2. Elegant Date & Battery
     useSerif = true;
     const char* dateS = "TUESDAY, FEBRUARY 10"; 
-    int dateW = get_text_width_scaled(dateS, 0.4);
-    writeln_scaled(dateS, (P_WIDTH - dateW)/2, 125, 0.4, true, COL_DARK);
+    int dateW = get_text_width_scaled(dateS, 0.45);
+    writeln_scaled(dateS, (P_WIDTH - dateW)/2, 140, 0.45, true, COL_DARK);
+    
+    // Battery Percentage (Minimal)
+    float batt = getBatteryVoltage();
+    int pct = map((int)(batt * 100), 330, 420, 0, 100);
+    if (pct > 100) pct = 100; if (pct < 0) pct = 0;
+    char bStr[16]; sprintf(bStr, "%d%% PWR", pct);
+    int bw = get_text_width_scaled(bStr, 0.35);
+    writeln_scaled(bStr, (P_WIDTH - bw)/2, 165, 0.35, false, COL_GRAY);
     useSerif = oldSerif;
 }
 
@@ -139,24 +138,16 @@ void updateDashboard() {
     epd_clear();
     memset(framebuffer, COL_WHITE, L_WIDTH * L_HEIGHT / 2);
 
-    drawWallpaper();
     drawHeroHeader();
     
-    // --- ILLUSTRATION BACKGROUND ---
-    // The wolf-girl illustration sits in the focal center
-    int illY = 150;
-    draw_bmp_rotated("/images/dashboard.bmp", (P_WIDTH - 400)/2, illY); 
+    drawHorizontalDivider(200);
+    drawWeatherStrip(210);
     
-    int illH = 350; // Increased height for better visibility
+    drawHorizontalDivider(300);
+    drawElegantQuote(320, 300);
     
-    drawHorizontalDivider( illY + illH + 10 );
-    drawWeatherStrip( illY + illH + 20 );
-    
-    drawHorizontalDivider( illY + illH + 100 );
-    drawElegantQuote( illY + illH + 120, 250);
-    
-    drawHorizontalDivider( illY + illH + 380 );
-    drawAgenda( illY + illH + 400 );
+    drawHorizontalDivider(620);
+    drawAgenda(640);
     
     drawGlobalNav();
 

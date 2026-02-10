@@ -171,7 +171,47 @@ void writeln_scaled(const char *string, int x, int y, float scale, bool bold, ui
                 else *out_ptr = (*out_ptr & 0xF0) | (color >> 4);
             }
         }
-        epd_draw_grayscale_image(area, temp_buf);
-        free(temp_buf);
-    }
-    
+            epd_draw_grayscale_image(area, temp_buf);
+            free(temp_buf);
+        }
+        
+        void draw_bmp_rotated(const char* path, int16_t x, int16_t y) {
+            File f = SD.open(path);
+            if (!f) return;
+        
+            // Read BMP Header
+            uint8_t header[54];
+            if (f.read(header, 54) != 54) { f.close(); return; }
+            
+            if (header[0] != 'B' || header[1] != 'M') { f.close(); return; }
+        
+            int32_t width = *(int32_t*)&header[18];
+            int32_t height = *(int32_t*)&header[22];
+            uint16_t bpp = *(uint16_t*)&header[28];
+            uint32_t offset = *(uint32_t*)&header[10];
+        
+            if (bpp != 24) { f.close(); return; } // Only 24-bit supported for now
+        
+            f.seek(offset);
+        
+            int rowSize = (width * 3 + 3) & ~3;
+            uint8_t* line = (uint8_t*)malloc(rowSize);
+            if (!line) { f.close(); return; }
+        
+            for (int i = 0; i < height; i++) {
+                f.read(line, rowSize);
+                int py = height - 1 - i; // BMP is bottom-up
+                for (int px = 0; px < width; px++) {
+                    uint8_t b = line[px * 3];
+                    uint8_t g = line[px * 3 + 1];
+                    uint8_t r = line[px * 3 + 2];
+                    // Simple grayscale conversion: (R+G+B)/3
+                    uint8_t gray = (uint8_t)((r + g + b) / 3);
+                    draw_pixel_rotated(x + px, y + py, gray);
+                }
+            }
+        
+            free(line);
+            f.close();
+        }
+        

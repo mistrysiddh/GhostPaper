@@ -142,11 +142,12 @@ void updateDashboard() {
     drawWallpaper();
     drawHeroHeader();
     
-    // --- PLACEHOLDER FOR ILLUSTRATION ---
-    // (A wolf-girl illustration would fit perfectly here)
+    // --- ILLUSTRATION BACKGROUND ---
+    // The wolf-girl illustration sits in the focal center
     int illY = 150;
-    int illH = 250;
-    // draw_grayscale_image(hero_illustration, illY); 
+    draw_bmp_rotated("/images/dashboard.bmp", (P_WIDTH - 400)/2, illY); 
+    
+    int illH = 350; // Increased height for better visibility
     
     drawHorizontalDivider( illY + illH + 10 );
     drawWeatherStrip( illY + illH + 20 );

@@ -237,7 +237,7 @@ void updateLibraryMenu(bool showMenu) {
 
         int bh = menuH / 6;
         int vCenterOffset = (bh / 2) + 15;
-        const char* labels[] = {"NEXT PAGE", "PREV PAGE", "REFRESH", "SYNC", "WIFI", "BACK"};
+        const char* labels[] = {"NEXT PAGE", "PREV PAGE", "DASHBOARD", "SYNC", "WIFI", "BACK"};
         
         for (int i = 0; i < 6; i++) {
             float scale = 0.8;
@@ -663,6 +663,10 @@ void handleTouchAction(int x, int y) {
         handleWiFiTouch(x, y);
         return;
     }
+    if (appState == STATE_DASHBOARD) {
+        handleDashboardTouch(x, y);
+        return;
+    }
     if (appState == STATE_PRIVACY || appState == STATE_SET_PIN) {
         handlePinTouch(x, y);
         return;
@@ -957,10 +961,9 @@ void handleTouchAction(int x, int y) {
                 updateLibrary();
                 return;
             }
-            else if (slot == 2) { // REFRESH
-                appState = STATE_LIBRARY;
-                epd_poweron(); epd_clear(); epd_poweroff();
-                updateLibrary();
+            else if (slot == 2) { // DASHBOARD
+                appState = STATE_DASHBOARD;
+                updateDashboard();
                 return;
             }
             else if (slot == 3) { // SYNC
@@ -1212,6 +1215,10 @@ void setup() {
         updateReader(false);
     } else if (appState == STATE_STORE) {
         updateStore();
+    } else if (appState == STATE_WIFI_SETUP) {
+        updateWiFiSetup(false);
+    } else if (appState == STATE_DASHBOARD) {
+        updateDashboard();
     }
     
     lastInteraction = millis();

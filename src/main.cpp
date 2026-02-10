@@ -505,7 +505,15 @@ void handlePinTouch(int x, int y) {
 void goToDeepSleep() {
     Serial.println(F("SYSTEM: Entering Deep Sleep Mode..."));
     
-    // 1. Fully shut down the EPD to save power and prevent noise
+    // 1. Display Screensaver
+    epd_poweron();
+    memset(framebuffer, 0xFF, L_WIDTH * L_HEIGHT / 2); // Clear buffer to white
+    // Draw the BMP centered (assuming 540x960 or smaller)
+    draw_bmp_rotated("/images/dashboard.bmp", 0, 0); 
+    epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+    delay(500); // Give E-ink time to settle
+
+    // 2. Fully shut down the EPD to save power and prevent noise
     epd_poweroff_all(); 
     
     // 2. Clear any existing wake-up sources to be safe

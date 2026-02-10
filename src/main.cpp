@@ -469,7 +469,34 @@ void handlePinTouch(int x, int y) {
             }
         }
     } else {
-        if (enteredPin.length() < 6) enteredPin += val;
+        if (enteredPin.length() < 6) {
+            enteredPin += val;
+            
+            // Auto-Unlock Check
+            if (appState == STATE_PRIVACY && enteredPin.length() == 6) {
+                if (enteredPin == activePin) {
+                    showTransitionEffect();
+                    appState = STATE_LIBRARY;
+                    updateLibrary();
+                    enteredPin = ""; 
+                    return;
+                } else {
+                    // Flash error or clear if wrong (Privacy Screen)
+                    delay(200); 
+                    enteredPin = "";
+                }
+            }
+            // Auto-Save Check for Set PIN
+            else if (appState == STATE_SET_PIN && enteredPin.length() == 6) {
+                prefs.putString("saved_pin", enteredPin);
+                activePin = enteredPin;
+                enteredPin = "";
+                showTransitionEffect();
+                appState = STATE_LIBRARY;
+                updateLibrary();
+                return;
+            }
+        }
     }
 
     drawPinPad(appState == STATE_SET_PIN);

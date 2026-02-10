@@ -132,12 +132,37 @@ void drawGlobalNav() {
     }
 }
 
+void drawWallpaper() {
+    // 1. Subtle Dot Grid (very light gray)
+    for (int x = 30; x < P_WIDTH; x += 60) {
+        for (int y = 30; y < P_HEIGHT; y += 60) {
+            draw_pixel_rotated(x, y, 0xEE); // Extremely faint stippling
+        }
+    }
+
+    // 2. Sophisticated corner "etchings"
+    // Top-Right Corner
+    for (int i=0; i<8; i++) {
+        draw_line_rotated(P_WIDTH - 150 + (i*12), 0, P_WIDTH, 150 - (i*12), 0xF2);
+    }
+    
+    // Bottom-Left Corner
+    for (int i=0; i<8; i++) {
+        draw_line_rotated(0, P_HEIGHT - 150 + (i*12), 150 - (i*12), P_HEIGHT, 0xF2);
+    }
+
+    // 3. Faint Architectural Guide Lines
+    draw_line_rotated(15, 100, 15, P_HEIGHT - 100, 0xF4);
+    draw_line_rotated(P_WIDTH - 15, 100, P_WIDTH - 15, P_HEIGHT - 100, 0xF4);
+}
+
 void updateDashboard() {
     fetchDashboardData();
     epd_poweron();
     epd_clear();
     memset(framebuffer, COL_WHITE, L_WIDTH * L_HEIGHT / 2);
 
+    drawWallpaper();
     drawHeroHeader();
     
     drawHorizontalDivider(200);

@@ -62,6 +62,7 @@ void startGhostDrop();
 void stopGhostDrop();
 void handleGhostDropTouch(int x, int y);
 void drawGhostDropUI(String status);
+void updateStore();
 
 // --- WiFi Setup Prototypes ---
 void updateWiFiSetup(bool partial = false);

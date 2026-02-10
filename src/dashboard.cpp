@@ -1,4 +1,5 @@
 #include "dashboard.h"
+#include "store.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>

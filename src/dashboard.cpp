@@ -9,11 +9,7 @@ String tempStr = "24C";
 String onlineQuote = "Books are a uniquely portable magic.";
 String onlineAuthor = "Stephen King";
 struct CalendarEvent { String time; String title; };
-std::vector<CalendarEvent> events = {
-    {"09:00", "Daily Standup"},
-    {"13:00", "Deep Work Session"},
-    {"17:00", "Gym & Health"}
-};
+std::vector<CalendarEvent> events;
 
 void drawHorizontalDivider(int y) {
     draw_line_rotated(40, y, P_WIDTH - 40, y, COL_BLACK);
@@ -102,34 +98,37 @@ void drawElegantQuote(int y, int h) {
 
 void drawAgenda(int y) {
     useSerif = false;
-    writeln_scaled("TODAY'S AGENDA", 40, y + 20, 0.35, true, COL_GRAY);
+    writeln_scaled("UPCOMING EVENTS", 40, y + 20, 0.35, true, COL_GRAY);
     
     int curY = y + 55;
-    for(auto& e : events) {
-        writeln_scaled(e.time.c_str(), 45, curY, 0.45, true, COL_BLACK);
-        writeln_scaled(e.title.c_str(), 120, curY, 0.45, false, COL_BLACK);
-        curY += 40;
+    if (events.empty()) {
+        writeln_scaled("No upcoming events found.", 45, curY, 0.45, false, COL_DARK);
+    } else {
+        int count = 0;
+        for(auto& e : events) {
+            if (count >= 4) break;
+            writeln_scaled(e.time.c_str(), 45, curY, 0.45, true, COL_BLACK);
+            writeln_scaled(e.title.c_str(), 160, curY, 0.45, false, COL_BLACK);
+            curY += 35;
+            count++;
+        }
     }
 }
 
-void drawReaderFooter() {
-    int y = P_HEIGHT - 100;
+void drawGlobalNav() {
+    int y = P_HEIGHT - 90;
     draw_line_rotated(0, y, P_WIDTH, y, COL_BLACK);
     
-    useSerif = true;
-    writeln_scaled("CURRENTLY READING", 40, y + 35, 0.35, false, COL_GRAY);
+    const char* navLabels[] = {"LIBRARY", "STORE", "SYNC", "WIFI"};
+    int btnW = P_WIDTH / 4;
     
-    useSerif = false;
-    const char* book = "Echoes of the Code";
-    writeln_scaled(book, 40, y + 70, 0.55, true, COL_BLACK);
-    
-    // Progress Bar
-    int barW = 120;
-    int barX = P_WIDTH - barW - 40;
-    int barY = y + 60;
-    draw_rect_rotated(barX, barY, barW, 6, COL_BLACK);
-    fill_rect_rotated(barX, barY, barW * 0.42, 6, COL_BLACK);
-    writeln_scaled("42%", barX + barW - 35, barY - 10, 0.35, true, COL_BLACK);
+    for (int i = 0; i < 4; i++) {
+        int bx = i * btnW;
+        if (i > 0) draw_line_rotated(bx, y + 15, bx, P_HEIGHT - 15, COL_GRAY);
+        
+        int tw = get_text_width_scaled(navLabels[i], 0.45);
+        writeln_scaled(navLabels[i], bx + (btnW - tw)/2, y + 55, 0.45, true, COL_BLACK);
+    }
 }
 
 void updateDashboard() {
@@ -192,19 +191,116 @@ void fetchDashboardData() {
             http.end();
         }
 
-        // 2. Quote
-        if (http.begin(client, "https://api.quotable.io/random?tags=literature|wisdom")) {
-            int code = http.GET();
-            if (code == 200) {
-                String payload = http.getString();
-                int qS = payload.indexOf("\"content\":\"") + 11;
-                int qE = payload.indexOf("\"", qS);
-                if (qS > 10) onlineQuote = payload.substring(qS, qE);
-                int aS = payload.indexOf("\"author\":\"") + 10;
-                int aE = payload.indexOf("\"", aS);
-                if (aS > 9) onlineAuthor = payload.substring(aS, aE);
+                // 2. Quote
+
+                if (http.begin(client, "https://api.quotable.io/random?tags=literature|wisdom")) {
+
+                    int code = http.GET();
+
+                    if (code == 200) {
+
+                        String payload = http.getString();
+
+                        int qS = payload.indexOf("\"content\":\"") + 11;
+
+                        int qE = payload.indexOf("\"", qS);
+
+                        if (qS > 10) onlineQuote = payload.substring(qS, qE);
+
+                        int aS = payload.indexOf("\"author\":\"") + 10;
+
+                        int aE = payload.indexOf("\"", aS);
+
+                        if (aS > 9) onlineAuthor = payload.substring(aS, aE);
+
+                    }
+
+                    http.end();
+
+                }
+
+        
+
+                // 3. Outlook Calendar (ICS)
+
+                if (http.begin(client, "https://outlook.office365.com/owa/calendar/140c083fb557498894d90a9f2264cf6c@mistrysiddh.com/e21ab2dfb37e46aea043c2bcc75b86c85675685166080299637/calendar.ics")) {
+
+                    int code = http.GET();
+
+                    if (code == 200) {
+
+                        events.clear();
+
+                        WiFiClient *stream = http.getStreamPtr();
+
+                        while (stream->available()) {
+
+                            String line = stream->readStringUntil('\n');
+
+                            line.trim();
+
+                            if (line.startsWith("BEGIN:VEVENT")) {
+
+                                String summary = "", start = "";
+
+                                while (stream->available()) {
+
+                                    line = stream->readStringUntil('\n');
+
+                                    line.trim();
+
+                                    if (line.startsWith("SUMMARY:")) {
+
+                                        summary = line.substring(8);
+
+                                        // Simple cleaning for Outlook SUMMARY
+
+                                        summary.replace("\\,", ",");
+
+                                    }
+
+                                    else if (line.startsWith("DTSTART")) {
+
+                                        int colon = line.indexOf(':');
+
+                                        if (colon > 0) {
+
+                                            String raw = line.substring(colon + 1); // 20240210T090000Z
+
+                                            if (raw.length() >= 13) {
+
+                                                start = raw.substring(9, 11) + ":" + raw.substring(11, 13);
+
+                                            }
+
+                                        }
+
+                                    }
+
+                                    else if (line.startsWith("END:VEVENT")) break;
+
+                                }
+
+                                if (summary != "" && start != "") {
+
+                                    events.push_back({start, summary});
+
+                                }
+
+                                if (events.size() > 6) break;
+
+                            }
+
+                        }
+
+                    }
+
+                    http.end();
+
+                }
+
             }
-            http.end();
+
         }
-    }
-}
+
+        

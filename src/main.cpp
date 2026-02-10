@@ -483,7 +483,7 @@ void goToDeepSleep() {
     // On S3, esp_sleep_enable_ext1_wakeup takes a mask and a mode.
     // ESP_EXT1_WAKEUP_ANY_LOW wakes if any pin in the mask goes LOW.
     
-    esp_sleep_enable_ext1_wakeup(1ULL << BUTTON_1, ESP_EXT1_WAKEUP_ANY_LOW);
+    esp_sleep_enable_ext1_wakeup(1ULL << BUTTON_1, ESP_EXT1_WAKEUP_ALL_LOW);
     
     // 4. Force the RTC to maintain the pull-up during sleep to prevent floating pin noise
     rtc_gpio_pullup_en((gpio_num_t)BUTTON_1);

@@ -7,6 +7,7 @@
 #include <WebServer.h>
 #include <ESPmDNS.h>
 #include <qrcode.h>
+#include "driver/rtc_io.h"
 
 // --- Configuration ---
 const unsigned long TOUCH_COOLDOWN = 300; 
@@ -467,11 +468,28 @@ void handlePinTouch(int x, int y) {
 
 void goToDeepSleep() {
     Serial.println(F("SYSTEM: Entering Deep Sleep Mode..."));
-    epd_poweroff_all(); // Ensure display is fully off
     
-    // Enable wake up on BUTTON_1 (GPIO 21) being pressed (Low)
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_1, 0); 
+    // 1. Fully shut down the EPD to save power and prevent noise
+    epd_poweroff_all(); 
     
+    // 2. Clear any existing wake-up sources to be safe
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+    
+    // 3. Configure EXT1 Wakeup for BUTTON_1 (GPIO 21)
+    // We use EXT1 because it's more stable on S3 and allows precise pin selection.
+    // 1ULL << BUTTON_1 creates a bitmask for the pin.
+    // ESP_EXT1_WAKEUP_NONZERO means wake when the pin is NOT zero (High)? 
+    // Wait, BUTTON_1 is active LOW (pulled up). So we want to wake when it goes LOW (Zero).
+    // On S3, esp_sleep_enable_ext1_wakeup takes a mask and a mode.
+    // ESP_EXT1_WAKEUP_ANY_LOW wakes if any pin in the mask goes LOW.
+    
+    esp_sleep_enable_ext1_wakeup(1ULL << BUTTON_1, ESP_EXT1_WAKEUP_ANY_LOW);
+    
+    // 4. Force the RTC to maintain the pull-up during sleep to prevent floating pin noise
+    rtc_gpio_pullup_en((gpio_num_t)BUTTON_1);
+    rtc_gpio_pulldown_dis((gpio_num_t)BUTTON_1);
+    
+    // 5. Enter Deep Sleep
     esp_deep_sleep_start();
 }
 
@@ -1197,8 +1215,8 @@ void loop() {
         lastBeat = millis();
     }
 
-    // Deep Sleep Logic (10 Minutes total inactivity)
-    if (millis() - lastInteraction > 600000) {
+    // Deep Sleep Logic (5 Minutes total inactivity)
+    if (millis() - lastInteraction > 300000) {
         goToDeepSleep();
     }
 

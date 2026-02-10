@@ -31,19 +31,19 @@ void drawProgressBar(int percent) {
     epd_poweron();
     // Targeted wash
     Rect_t area = {
-        .x = (int32_t)(960 - 1 - (barY + barH)),
+        .x = (int32_t)(960 - (barY + barH)),
         .y = (int32_t)barX,
-        .width = (int32_t)barH,
-        .height = (int32_t)barW
+        .width = (uint32_t)barH,
+        .height = (uint32_t)barW
     };
-    epd_push_pixels(area, 40, 1); 
+    for (int i = 0; i < 2; i++) epd_push_pixels(area, 40, 1); 
     
     fill_rect_rotated(barX, barY, barW, barH, COL_WHITE);
     draw_rect_rotated(barX, barY, barW, barH, COL_BLACK);
     int fillW = (barW * percent) / 100;
     if (fillW > 0) fill_rect_rotated(barX, barY, fillW, barH, COL_BLACK);
     
-    epd_draw_grayscale_image(area, framebuffer);
+    epd_draw_grayscale_image_area(area, framebuffer);
     epd_poweroff();
 }
 
@@ -131,6 +131,7 @@ void drawStoreItem(int index, int y) {
     for (auto& b : books) if (b == targetFile) alreadyDownloaded = true;
 
     if (alreadyDownloaded) {
+        fill_rect_rotated(btnX, btnY, btnW, btnH, COL_DARK);
         draw_rounded_rect(btnX, btnY, btnW, btnH, 8, COL_DARK);
         const char* dLabel = "READ";
         int dw = get_text_width_scaled(dLabel, 0.5);

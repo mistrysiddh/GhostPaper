@@ -5,9 +5,10 @@
 
 void updateDashboard();
 void handleDashboardTouch(int x, int y);
-void drawWeatherWidget(int x, int y, int w, int h);
-void drawCalendarWidget(int x, int y, int w, int h);
-void drawGoalWidget(int x, int y, int w, int h);
-void fetchDashboardData();
+void drawReadingWidget(int y);
+void fetchDashboardData(bool force = false);
+
+extern bool dashboardDataReady;
+extern bool isFetchingData;
 
 #endif

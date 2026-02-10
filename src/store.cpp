@@ -20,6 +20,46 @@ String currentStoreUrl = "https://www.gutenberg.org/ebooks/search.opds/?sort_ord
 int storeScrollOffset = 0;
 String downloadStatus = "";
 
+const char* STORE_CACHE_FILE = "/store_cache.csv";
+
+void saveStoreCache() {
+    File f = SD.open(STORE_CACHE_FILE, FILE_WRITE);
+    if (!f) return;
+    for (const auto& entry : storeCatalog) {
+        // Simple CSV: Title|Author|Url|Format
+        f.printf("%s|%s|%s|%s\n", entry.title.c_str(), entry.author.c_str(), entry.downloadUrl.c_str(), entry.format.c_str());
+    }
+    f.close();
+}
+
+void loadStoreCache() {
+    if (!SD.exists(STORE_CACHE_FILE)) return;
+    File f = SD.open(STORE_CACHE_FILE);
+    if (!f) return;
+    storeCatalog.clear();
+    while (f.available()) {
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (line == "") continue;
+        
+        // Split by |
+        int p1 = line.indexOf('|');
+        int p2 = line.indexOf('|', p1 + 1);
+        int p3 = line.indexOf('|', p2 + 1);
+        
+        if (p1 != -1 && p2 != -1 && p3 != -1) {
+            OpdsEntry entry;
+            entry.title = line.substring(0, p1);
+            entry.author = line.substring(p1 + 1, p2);
+            entry.downloadUrl = line.substring(p2 + 1, p3);
+            entry.format = line.substring(p3 + 1);
+            storeCatalog.push_back(entry);
+        }
+    }
+    f.close();
+    if (!storeCatalog.empty()) downloadStatus = "Loaded from Cache";
+}
+
 OpdsClient opds;
 
 void drawProgressBar(int percent) {
@@ -57,7 +97,7 @@ void syncStore() {
         WiFi.begin(savedSSID.c_str(), savedPass.c_str());
         
         int retries = 0;
-        while (WiFi.status() != WL_CONNECTED && retries < 20) {
+        while (WiFi.status() != WL_CONNECTED && retries < 15) {
             delay(500);
             retries++;
         }
@@ -72,11 +112,18 @@ void syncStore() {
         epd_draw_grayscale_image(epd_full_screen(), framebuffer);
         epd_poweroff();
 
-        storeCatalog = opds.fetchCatalog(currentStoreUrl);
+        auto newCatalog = opds.fetchCatalog(currentStoreUrl);
+        if (!newCatalog.empty()) {
+            storeCatalog = newCatalog;
+            saveStoreCache();
+            downloadStatus = "";
+        } else {
+            downloadStatus = opds.getLastError();
+        }
         storeScrollOffset = 0;
-        downloadStatus = storeCatalog.empty() ? opds.getLastError() : "";
     } else {
-        downloadStatus = "WiFi Failed";
+        if (storeCatalog.empty()) loadStoreCache();
+        downloadStatus = storeCatalog.empty() ? "WiFi Failed" : "Offline (Cached)";
     }
 }
 
@@ -146,6 +193,7 @@ void drawStoreItem(int index, int y) {
 }
 
 void updateStore() {
+    if (storeCatalog.empty()) loadStoreCache();
     epd_poweron();
     epd_clear();
     memset(framebuffer, COL_WHITE, L_WIDTH * L_HEIGHT / 2);

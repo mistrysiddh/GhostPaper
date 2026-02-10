@@ -11,7 +11,7 @@
 #include "config.h"
 
 // --- State ---
-enum AppState { STATE_SPLASH, STATE_PRIVACY, STATE_SET_PIN, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS, STATE_READER_OPTIONS, STATE_LIBRARY_OPTIONS, STATE_GHOSTDROP, STATE_STORE, STATE_WIFI_SETUP, STATE_DASHBOARD, STATE_SCREENSAVER };
+enum AppState { STATE_SPLASH, STATE_PRIVACY, STATE_SET_PIN, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS, STATE_READER_OPTIONS, STATE_LIBRARY_OPTIONS, STATE_GHOSTDROP, STATE_STORE, STATE_WIFI_SETUP, STATE_DASHBOARD, STATE_SCREENSAVER, STATE_SKETCH };
 enum LibFilter { FILTER_ALL, FILTER_NEW, FILTER_READING, FILTER_FINISHED, FILTER_STORE };
 
 extern RTC_DATA_ATTR AppState appState;
@@ -33,6 +33,7 @@ extern TouchDrvGT911 touch;
 extern PCF8563_Class rtc;
 extern std::vector<long> pageHistory;
 extern RTC_DATA_ATTR bool touchEnabled;
+extern RTC_DATA_ATTR bool isGuestMode;
 
 // --- Prototypes ---
 void updateLibrary();
@@ -74,6 +75,11 @@ void epd_draw_grayscale_image_area(Rect_t area, uint8_t *full_fb);
 // --- Dashboard Prototypes ---
 void updateDashboard();
 void handleDashboardTouch(int x, int y);
+extern bool dashboardDataReady;
+
+// --- Sketch Prototypes ---
+void updateSketch();
+void handleSketchTouch(int x, int y);
 
 // --- Graphics Prototypes ---
 void draw_pixel_rotated(int16_t x, int16_t y, uint8_t gray);

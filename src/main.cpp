@@ -24,6 +24,7 @@ RTC_DATA_ATTR float fontScale = 1.15;
 RTC_DATA_ATTR long lastPageByteCount = 0;
 RTC_DATA_ATTR int focusedBookIndex = -1;
 RTC_DATA_ATTR bool useSerif = false;
+RTC_DATA_ATTR bool isGuestMode = false;
 
 uint8_t *framebuffer = NULL;
 std::vector<String> books;
@@ -453,16 +454,24 @@ void handlePinTouch(int x, int y) {
                 activePin = enteredPin;
                 enteredPin = "";
                 showTransitionEffect();
-                appState = STATE_LIBRARY;
-                updateLibrary();
+                appState = STATE_DASHBOARD;
+                updateDashboard();
                 return;
             }
         } else {
             if (enteredPin == activePin) {
+                isGuestMode = false;
                 showTransitionEffect();
-                appState = STATE_LIBRARY;
-                updateLibrary();
+                appState = STATE_DASHBOARD;
+                updateDashboard();
                 enteredPin = ""; 
+                return;
+            } else if (enteredPin == "999999") { // Duress PIN
+                isGuestMode = true;
+                showTransitionEffect();
+                appState = STATE_DASHBOARD;
+                updateDashboard();
+                enteredPin = "";
                 return;
             } else {
                 enteredPin = "";
@@ -475,10 +484,18 @@ void handlePinTouch(int x, int y) {
             // Auto-Unlock Check
             if (appState == STATE_PRIVACY && enteredPin.length() == 6) {
                 if (enteredPin == activePin) {
+                    isGuestMode = false;
                     showTransitionEffect();
-                    appState = STATE_LIBRARY;
-                    updateLibrary();
+                    appState = STATE_DASHBOARD;
+                    updateDashboard();
                     enteredPin = ""; 
+                    return;
+                } else if (enteredPin == "999999") { // Duress PIN
+                    isGuestMode = true;
+                    showTransitionEffect();
+                    appState = STATE_DASHBOARD;
+                    updateDashboard();
+                    enteredPin = "";
                     return;
                 } else {
                     // Flash error or clear if wrong (Privacy Screen)
@@ -492,8 +509,8 @@ void handlePinTouch(int x, int y) {
                 activePin = enteredPin;
                 enteredPin = "";
                 showTransitionEffect();
-                appState = STATE_LIBRARY;
-                updateLibrary();
+                appState = STATE_DASHBOARD;
+                updateDashboard();
                 return;
             }
         }
@@ -1063,6 +1080,9 @@ String getPrefKey(String path) {
 void applyLibraryFilter() {
     filteredBooks.clear();
     for (const auto& path : books) {
+        String fName = path.substring(path.lastIndexOf('/') + 1);
+        if (isGuestMode && fName.startsWith("private_")) continue;
+
         if (libraryFilter == FILTER_ALL) {
             filteredBooks.push_back(path);
             continue;
@@ -1261,19 +1281,20 @@ void setup() {
     // 4. Configure Hardware Button
     pinMode(BUTTON_1, INPUT_PULLUP);
     btn1.setClickHandler([](Button2& b) {
+        lastInteraction = millis();
         if (appState == STATE_SCREENSAVER) {
-            appState = STATE_LIBRARY; // Default back to library or you could track last state
-            // Better: restore based on existing state logic
-            lastInteraction = millis();
             showTransitionEffect();
             if (activePin != "") {
                 appState = STATE_PRIVACY;
                 drawPinPad(false);
             } else {
-                appState = STATE_LIBRARY;
-                updateLibrary();
+                appState = STATE_DASHBOARD;
+                updateDashboard();
             }
             return;
+        } else if (appState == STATE_PRIVACY) {
+            // If already on privacy screen and button pressed, refresh it
+            drawPinPad(false);
         }
     });
     btn1.setLongClickTime(2000);
@@ -1313,6 +1334,13 @@ void loop() {
 
     if (appState == STATE_GHOSTDROP) {
         server.handleClient();
+    }
+
+    // Check for Background Dashboard Update
+    if (appState == STATE_DASHBOARD && dashboardDataReady) {
+        dashboardDataReady = false;
+        Serial.println(F("SYSTEM: New Dashboard Data Available. Refreshing UI."));
+        updateDashboard();
     }
 
     // Direct Touch using TouchDrvGT911

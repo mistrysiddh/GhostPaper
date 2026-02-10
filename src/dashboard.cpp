@@ -148,17 +148,22 @@ void updateDashboard() {
     drawHorizontalDivider(620);
     drawAgenda(640);
     
-    drawReaderFooter();
+    drawGlobalNav();
 
     epd_draw_grayscale_image(epd_full_screen(), framebuffer);
     epd_poweroff();
 }
 
 void handleDashboardTouch(int x, int y) {
-    if (y > P_HEIGHT - 100) {
-         appState = STATE_LIBRARY;
-         showTransitionEffect();
-         updateLibrary();
+    if (y > P_HEIGHT - 90) {
+        int btnW = P_WIDTH / 4;
+        int slot = x / btnW;
+        
+        showTransitionEffect();
+        if (slot == 0) { appState = STATE_LIBRARY; updateLibrary(); }
+        else if (slot == 1) { appState = STATE_STORE; updateStore(); }
+        else if (slot == 2) { startGhostDrop(); }
+        else if (slot == 3) { appState = STATE_WIFI_SETUP; startWiFiScan(); }
     } else {
         updateDashboard();
     }

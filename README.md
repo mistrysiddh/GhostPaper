@@ -80,12 +80,20 @@ Wireless book management via a local WebServer.
 4. **Build**: Use the PlatformIO "Upload" task to flash the firmware.
 5. **Setup**: Follow the on-screen prompt to initialize your 6-digit security PIN.
 
-## 📈 Repository Stats
+## 📈 Repository Activity
 
-![Star History Chart](https://api.star-history.com/svg?repos=mistrysiddh/GhostPaper&type=Date)
+![Activity Graph](https://github-readme-activity-graph.vercel.app/graph?username=mistrysiddh&repo=GhostPaper&theme=react&bg_color=ffffff&color=000000&line=000000&point=000000&area=true&hide_border=true)
 
-## 🚀 Quick Start Flow
+## 🚀 Getting Started
 
+### Cloning the Repository
+To get a local copy up and running, follow these simple steps:
+```bash
+git clone https://github.com/mistrysiddh/GhostPaper.git
+cd GhostPaper
+```
+
+### Quick Start Flow
 ```mermaid
 graph LR
     A[Clone Repo] --> B[Install PlatformIO]

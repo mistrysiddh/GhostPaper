@@ -112,4 +112,14 @@ GhostPaper OS is an open-source project, and we welcome contributions of all kin
 - **Showcase**: Share your LilyGo setup with us by tagging the project!
 
 ---
-*GhostPaper OS - Optimized for the love of reading and focus.*
+<p align="center">
+  <b>GhostPaper OS</b> • <i>Optimized for the love of reading and focus.</i><br>
+  Designed for the <b>LilyGo T5-47 S3</b><br>
+  <br>
+  <a href="#ghostpaper-os-"><img src="https://img.shields.io/badge/Back%20to%20Top-black?style=flat-square" alt="Back to Top"></a>
+  <br>
+  <br>
+  <a href="https://github.com/mistrysiddh/GhostPaper">GitHub</a> • 
+  <a href="https://github.com/mistrysiddh/GhostPaper/blob/master/README.md#--new-in-v11">Changelog</a> • 
+  <a href="https://github.com/mistrysiddh/GhostPaper/issues">Support</a>
+</p>

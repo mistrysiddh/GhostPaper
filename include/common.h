@@ -11,8 +11,13 @@
 #include "config.h"
 
 // --- State ---
-enum AppState { STATE_SPLASH, STATE_PRIVACY, STATE_SET_PIN, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS, STATE_READER_OPTIONS, STATE_LIBRARY_OPTIONS, STATE_GHOSTDROP, STATE_STORE, STATE_WIFI_SETUP, STATE_DASHBOARD, STATE_SCREENSAVER };
+enum AppState { STATE_SPLASH, STATE_PRIVACY, STATE_SET_PIN, STATE_LIBRARY, STATE_READING, STATE_BOOK_OPTIONS, STATE_READER_OPTIONS, STATE_LIBRARY_OPTIONS, STATE_GHOSTDROP, STATE_STORE, STATE_WIFI_SETUP, STATE_DASHBOARD, STATE_SCREENSAVER, STATE_TOC };
 enum LibFilter { FILTER_ALL, FILTER_NEW, FILTER_READING, FILTER_FINISHED, FILTER_STORE };
+
+struct Chapter {
+    String title;
+    long offset;
+};
 
 extern RTC_DATA_ATTR AppState appState;
 extern RTC_DATA_ATTR LibFilter libraryFilter;
@@ -28,6 +33,7 @@ extern RTC_DATA_ATTR bool useSerif;
 extern uint8_t *framebuffer;
 extern std::vector<String> books;
 extern std::vector<String> filteredBooks;
+extern std::vector<Chapter> chapters;
 extern Preferences prefs;
 extern TouchDrvGT911 touch;
 extern PCF8563_Class rtc;
@@ -40,6 +46,9 @@ void partialUpdateLibraryHeader();
 void applyLibraryFilter();
 void drawEnhancedBookCover(int x, int y, String title, int progress, int bookIndex);
 void updateReader(bool partial_refresh = false);
+void generateTOC();
+void updateTOC();
+void handleTOCTouch(int x, int y);
 void partialUpdateHeader();
 long renderPage(const char* text, int startX, int startY, int maxWidth, int maxHeight);
 void openBook();

@@ -448,9 +448,15 @@ void openBook() {
 
 
 
-    textPos = prefs.getLong(getPrefKey(books[currentFileIndex]).c_str(), 0);
+        textPos = prefs.getLong(getPrefKey(books[currentFileIndex]).c_str(), 0);
 
-    appState = STATE_READING;
+
+
+        generateTOC();
+
+
+
+        appState = STATE_READING;
 
     pageHistory.clear();
 

@@ -4,7 +4,7 @@ setlocal enabledelayedexpansion
 :: GhostPage OS Binary Builder
 :: This script compiles the project and merges the resulting binaries into a single file.
 
-set "OUTPUT_NAME=ghostpage_os_v0.1.bin"
+set "OUTPUT_NAME=ghostpage_os_v0.2.bin"
 set "BUILD_DIR=.pio\build\lilygo-t5-47-s3"
 
 echo --- 1. Compiling GhostPage OS ---

@@ -28,9 +28,69 @@ RTC_DATA_ATTR bool useSerif = false;
 uint8_t *framebuffer = NULL;
 std::vector<String> books;
 std::vector<String> filteredBooks;
+std::vector<Chapter> chapters;
 Preferences prefs;
 TouchDrvGT911 touch;
 std::vector<long> pageHistory;
+
+void generateTOC() {
+    chapters.clear();
+    if (currentFileIndex < 0 || currentFileIndex >= (int)books.size()) return;
+    
+    String path = books[currentFileIndex];
+    const char* keywords[] = {"CHAPTER", "PART", "PROLOGUE", "EPILOGUE", "Chapter", "Part"};
+    
+    if (path.startsWith("internal:")) {
+        const char* text = DEFAULT_BOOK_TEXT;
+        const char* ptr = text;
+        while ((ptr = strstr(ptr, "Chapter")) != NULL) {
+            Chapter c;
+            const char* endLine = strchr(ptr, '\n');
+            if (endLine) {
+                c.title = String(ptr).substring(0, endLine - ptr);
+            } else {
+                c.title = String(ptr);
+            }
+            c.title.trim();
+            c.offset = ptr - text;
+            chapters.push_back(c);
+            ptr++;
+            if (chapters.size() >= 40) break;
+        }
+    } else {
+        File f = SD.open(path);
+        if (!f) return;
+        
+        char buf[256];
+        long pos = 0;
+        while (f.available()) {
+            pos = f.position();
+            String line = f.readStringUntil('\n');
+            line.trim();
+            
+            bool found = false;
+            for (const char* kw : keywords) {
+                if (line.startsWith(kw)) {
+                    found = true;
+                    break;
+                }
+            }
+            
+            if (found) {
+                Chapter c;
+                c.title = line;
+                if (c.title.length() > 30) c.title = c.title.substring(0, 27) + "...";
+                c.offset = pos;
+                chapters.push_back(c);
+            }
+            
+            if (chapters.size() >= 40) break;
+        }
+        f.close();
+    }
+    Serial.printf("TOC: Found %d chapters\n", (int)chapters.size());
+}
+
 unsigned long lastInteraction = 0;
 unsigned long lastTouchTime = 0;
 PCF8563_Class rtc;
@@ -291,7 +351,7 @@ void updateReaderMenu(bool showMenu) {
         int bh = menuH / 6;
         int vCenterOffset = (bh / 2) + 15;
 
-        const char* labels[] = {"FONT +", "FONT -", useSerif ? "SERIF ON" : "SANS SERIF", "REFRESH", "SYNC", "BACK"};
+        const char* labels[] = {"FONT +", "FONT -", useSerif ? "SERIF ON" : "SANS SERIF", "CHAPTERS", "SYNC", "BACK"};
         for (int i = 0; i < 6; i++) {
             float scale = 1.0; // Larger text for larger menu
             int tw = get_text_width_scaled(labels[i], scale);
@@ -698,6 +758,10 @@ void handleTouchAction(int x, int y) {
         handleWiFiTouch(x, y);
         return;
     }
+    if (appState == STATE_TOC) {
+        handleTOCTouch(x, y);
+        return;
+    }
     if (appState == STATE_DASHBOARD) {
         handleDashboardTouch(x, y);
         return;
@@ -780,9 +844,9 @@ void handleTouchAction(int x, int y) {
                 updateReader(false); // Triggers redraw with new font
                 return;
             }
-            else if (slot == 3) { // REFRESH
-                appState = STATE_READING;
-                forceFullRefresh();
+            else if (slot == 3) { // CHAPTERS
+                appState = STATE_TOC;
+                updateTOC();
                 return;
             }
             else if (slot == 4) { // SYNC
@@ -1247,6 +1311,7 @@ void setup() {
     } else if (appState == STATE_LIBRARY) {
         updateLibrary();
     } else if (appState == STATE_READING) {
+        generateTOC();
         updateReader(false);
     } else if (appState == STATE_STORE) {
         updateStore();

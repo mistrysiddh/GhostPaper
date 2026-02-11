@@ -80,5 +80,28 @@ Wireless book management via a local WebServer.
 4. **Build**: Use the PlatformIO "Upload" task to flash the firmware.
 5. **Setup**: Follow the on-screen prompt to initialize your 6-digit security PIN.
 
+## 📈 Repository Stats
+
+![Star History Chart](https://api.star-history.com/svg?repos=mistrysiddh/GhostPaper&type=Date)
+
+## 🚀 Quick Start Flow
+
+```mermaid
+graph LR
+    A[Clone Repo] --> B[Install PlatformIO]
+    B --> C[Build Firmware]
+    C --> D[Flash ESP32-S3]
+    D --> E[Initialize PIN]
+```
+
+## 🤝 Contributing & Support
+
+GhostPaper OS is an open-source project, and we welcome contributions of all kinds!
+
+- **Star the Repo**: If you find this project useful, please give it a ⭐ to help others discover it!
+- **Report Bugs**: Open an issue if you encounter any problems or have feature suggestions.
+- **Pull Requests**: Contributions to improve the rendering engine, UI, or add new features are highly encouraged.
+- **Showcase**: Share your LilyGo setup with us by tagging the project!
+
 ---
 *GhostPaper OS - Optimized for the love of reading and focus.*
